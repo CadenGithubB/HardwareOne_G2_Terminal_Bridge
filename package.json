@@ -1,0 +1,14 @@
+{
+  "name": "hardwareone-g2-terminal-bridge",
+  "private": true,
+  "description": "HardwareOne relay, G2 Terminal adapter and OpenClaw conversation skill",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "npm run test:relay && npm run test:terminal && npm run test:launcher",
+    "test:relay": "python3 -B -m unittest discover -s tests -p 'test_relay*.py' -v",
+    "test:terminal": "node --test terminal/test_provider.mjs terminal/tests/device-api.test.mjs",
+    "test:launcher": "python3 -B -m unittest discover -s launcher/macos -p 'test_*.py' -v"
+  }
+}

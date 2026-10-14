@@ -1,0 +1,28 @@
+# Private deployment and investigation material
+.local/
+private/
+runtime/
+config.json
+hardwareone.json
+*token*.txt
+*.pem
+*.key
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+*.log
+host-update-*/
+*.before-terminal-*
+# Downloaded/installed upstream packages and generated apps
+node_modules/
+official/
+*.tgz
+*.app/
+build/
+dist/
+# Local tools
+__pycache__/
+*.py[cod]
+.DS_Store

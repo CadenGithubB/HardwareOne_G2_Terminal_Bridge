@@ -1,0 +1,95 @@
+{
+  "repository": "https://github.com/CadenGithubB/HardwareOne",
+  "baseCommit": "2834dd26b0e14a4d21c123bb66c67685af7669a5",
+  "snapshot": "2026-10-14 working tree, including pending Terminal fixes",
+  "files": {
+    "relay/README.md": {
+      "source": "integrations/openclaw/relay/README.md",
+      "sha256": "b4bf6ef418699afc4af3f4e812d6d2ba1aba3fcc20a91e5a982ba232a4d0f2ca"
+    },
+    "relay/config.example.json": {
+      "source": "integrations/openclaw/relay/config.example.json",
+      "sha256": "1057aae66e809e2b665f51dd92d8306e020c74ebb0f7cca5120eeb881ecabda7"
+    },
+    "relay/relay.py": {
+      "source": "integrations/openclaw/relay/relay.py",
+      "sha256": "2d6c9b66566fad0fd2acc321dda075d91bebf892ebd5d767e3d8163dc38e4e43"
+    },
+    "relay/setup_relay.py": {
+      "source": "integrations/openclaw/relay/setup_relay.py",
+      "sha256": "7538a4aea73c142067748c7a23783f4620593e258b4936840abd8e3b231c03b0"
+    },
+    "terminal/update.py": {
+      "source": "integrations/openclaw/terminal/update.py",
+      "sha256": "3f738ef9bad3eb305f0e8344a76e80d30ead7569811832324cf1592a2e47e95e"
+    },
+    "terminal/DEVICE_API.md": {
+      "source": "integrations/openclaw/terminal/DEVICE_API.md",
+      "sha256": "b4393cda06fa8c9bcb9ec5560923eaf7eb7acef7e3a63c9e9ef7f6b777f2323a"
+    },
+    "terminal/provider.mjs": {
+      "source": "integrations/openclaw/terminal/provider.mjs",
+      "sha256": "5d84d42ed3fb6bece2c4bbc602c52a3107578d04dcfeadb5c9c6bb71dedab1d9"
+    },
+    "terminal/gateway.mjs": {
+      "source": "integrations/openclaw/terminal/gateway.mjs",
+      "sha256": "43003e17b78fdc0a35645cb9b048ef791bd4b4075e37088a533e1a11a83dc46d"
+    },
+    "terminal/start.mjs": {
+      "source": "integrations/openclaw/terminal/start.mjs",
+      "sha256": "ebcbc54e6ec2e4b7d95d8d56b2a671a326fcf2ea271ae2d2ee577047ae7d8cfb"
+    },
+    "terminal/README.md": {
+      "source": "integrations/openclaw/terminal/README.md",
+      "sha256": "33ecaf286deec7888e69ea3159fadd4939f226bc73049aa529232b80bfc8c444"
+    },
+    "terminal/install.py": {
+      "source": "integrations/openclaw/terminal/install.py",
+      "sha256": "09a782406f1b5cf167f3ffa08d43d20a81ba8518090c5b326d23e8dc5b9110a6"
+    },
+    "terminal/test_provider.mjs": {
+      "source": "integrations/openclaw/terminal/test_provider.mjs",
+      "sha256": "46695c4fcff229518198650fc48d855463e7f85d8ae7154e56617adfbaca7617"
+    },
+    "terminal/enable_terminal.py": {
+      "source": "integrations/openclaw/terminal/enable_terminal.py",
+      "sha256": "4525c3f25367e29ad7b56b3d04cdaea47972a408ff042bc416a1aaa8021e5c75"
+    },
+    "terminal/device-api.mjs": {
+      "source": "integrations/openclaw/terminal/device-api.mjs",
+      "sha256": "90eed7ab3b2deb810125b495cba0350cc00a544e729165c74ea388f1b558eb87"
+    },
+    "terminal/tests/device-api.test.mjs": {
+      "source": "integrations/openclaw/terminal/tests/device-api.test.mjs",
+      "sha256": "5469537c7c8dd25a57ee4c80bf52df9c068cb992f937a5263b4253b9ecbf4a32"
+    },
+    "tests/test_relay.py": {
+      "source": "integrations/openclaw/tests/test_relay.py",
+      "sha256": "c4df2db51fd91d7b9ff6ba9ec65861c0538d3013380c1ac070b6243883274c03"
+    },
+    "tests/test_relay_setup.py": {
+      "source": "integrations/openclaw/tests/test_relay_setup.py",
+      "sha256": "cfe49c644c700a75fb3e8173ea8095fe9df0d01a7c14bd6663d6ca913815711e"
+    },
+    "launcher/macos/control.py": {
+      "source": "existing HardwareOne macOS launcher source/control.py",
+      "sha256": "385eb5fe7948729005d7a2525d117271b4c724e8912d4f1b6904c9adb28639b2"
+    },
+    "launcher/macos/setup_help.py": {
+      "source": "existing HardwareOne macOS launcher source/setup_help.py",
+      "sha256": "e0efe67c3ed1622f6e169f1c228a41789de65ed9b864f867e9a3c77634f011a6"
+    },
+    "launcher/macos/Launcher.applescript": {
+      "source": "existing HardwareOne macOS launcher source/Launcher.applescript",
+      "sha256": "0bae7a62e7465820fb03bba923f14df8b430c450f59b155d44a50b21f6a432a4"
+    },
+    "launcher/macos/test_control.py": {
+      "source": "existing HardwareOne macOS launcher source/test_control.py",
+      "sha256": "e995fc2007b4b6898825691b61c5d194cfa4d8ad65cc7f6f52835681720040c2"
+    },
+    "launcher/macos/test_setup_help.py": {
+      "source": "existing HardwareOne macOS launcher source/test_setup_help.py",
+      "sha256": "311145410d04a9cac67fec0c963d8c29c1b6ab046f6242f63d0c7323901addff"
+    }
+  }
+}
