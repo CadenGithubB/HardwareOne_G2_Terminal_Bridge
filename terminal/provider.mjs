@@ -22,8 +22,8 @@ const boundedText = (text, limit = MAX_TEXT) => { const n = Buffer.byteLength(te
   const bytes = Buffer.from(text); let end = limit; while ((bytes[end] & 0xc0) === 0x80) --end;
   return bytes.subarray(0, end).toString('utf8'); };
 
-// Implements the official Even Terminal ProviderHandlers shape. Its routes and
-// SSE/message cursor store stay official; Gateway remains the history owner.
+// Adapts OpenClaw sessions to the first-party device API.
+// Gateway remains the history owner.
 export function createOpenClawProvider(emit, { client = new Gateway(JSON.parse(process.env.HW1_GATEWAY_CONFIG || '{}')) } = {}) {
   const sessions = new Map(), byKey = new Map(), requests = new Map();
   // Retired IDs may never trigger another send in this process. A bounded Bloom

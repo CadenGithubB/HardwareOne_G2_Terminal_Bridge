@@ -1,82 +1,90 @@
 #!/usr/bin/env python3
-"""Update the three Hardware One host modules; preserve private setup and npm."""
+"""Update verified first-party runtime files; preserve private configuration and identity."""
 import argparse
 from datetime import datetime, timezone
-import hashlib
-import json
 import os
 from pathlib import Path
 import tempfile
 
-MODULES = ('gateway.mjs', 'provider.mjs', 'device-api.mjs')
+import runtime_files as runtime
 
 
-def digest(data):
-    return hashlib.sha256(data).hexdigest()
-
-
-def update(target, source, check=False):
-    target = target.expanduser().resolve(strict=True)
-    extension = target / 'official/dist/hardwareone'
-    provenance = target / 'provenance.json'
-    if extension.resolve(strict=True) != extension or provenance.is_symlink():
-        raise ValueError('Unexpected installation links; nothing changed')
-    metadata = json.loads(provenance.read_text())
-    if metadata.get('officialVersion') != '0.10.5':
-        raise ValueError('Expected the Hardware One installation of Even Terminal 0.10.5')
-    hashes = metadata.get('extensionSha256', {})
-    changes = {}
-    for name in MODULES:
-        destination = extension / name
-        if destination.is_symlink() or not destination.is_file():
-            raise ValueError('Unexpected installed module: ' + name)
-        old, new = destination.read_bytes(), (source / name).read_bytes()
-        if digest(old) != hashes.get(name):
-            raise ValueError('Installed module differs from its recorded version: ' + name)
-        if not new or len(new) > 256 * 1024:
-            raise ValueError('Invalid update module: ' + name)
-        if old != new:
-            changes[destination] = (old, new)
-        hashes[name] = digest(new)
+def update(target, source, check=False, node=None):
+    target = runtime.checked_path(target)
+    installed = runtime.installed_files(target)
+    contents = runtime.source_files(source)
+    runtime.node_executable(node)
+    contents['provenance.json'] = runtime.provenance_bytes(contents)
+    changes = {name: (installed[name][0], data, installed[name][1])
+               for name, data in contents.items() if data != installed[name][0]}
     if not changes:
-        print('Hardware One host modules are already current; no files changed.')
-        return
+        print('HardwareOne runtime files are already current; no files changed.')
+        return False
     if check:
-        print('Update validated for ' + ', '.join(p.name for p in changes) + '; no files changed.')
-        return
-    metadata['extensionSha256'] = hashes
-    changes[provenance] = (provenance.read_bytes(), (json.dumps(metadata, indent=2) + '\n').encode())
-    # Validate everything before creating a backup or replacing any module.
-    backup = Path(tempfile.mkdtemp(prefix='host-update-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-'), dir=target))
-    for path, (old, _) in changes.items():
-        (backup / path.name).write_bytes(old)
-    replaced = []
+        print('Update validated for ' + ', '.join(name for name in changes if name != 'provenance.json') + '; no files changed.')
+        return False
+    # Exclude concurrent updater processes. Never unlink another operation's lock.
+    lock = target / '.runtime-update.lock'
     try:
-        with tempfile.TemporaryDirectory(prefix='.host-update-', dir=target) as tmp:
-            for path, (_, new) in changes.items():
-                staged = Path(tmp) / path.name
-                staged.write_bytes(new)
-            for path in changes:
-                os.replace(Path(tmp) / path.name, path)
-                replaced.append(path)
-    except Exception:
-        for path in reversed(replaced):
-            path.write_bytes(changes[path][0])
-        raise
-    print('Updated Hardware One host modules. Backup: ' + str(backup))
-    print('Credentials, identity, relay, dependencies and private configuration are unchanged.')
-    print('Restart the Terminal host: node "$HOME/.local/share/hardwareone-even-terminal/start.mjs"')
+        descriptor = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise ValueError('An update lock exists; inspect that operation before retrying') from None
+    owned_lock = os.fstat(descriptor)
+    backup = None
+    try:
+        # Recheck all installed inputs after acquiring the lock, before backups/writes.
+        if runtime.installed_files(target) != installed:
+            raise ValueError('Installed runtime changed during update validation; no files changed')
+        backup = Path(tempfile.mkdtemp(prefix='runtime-update-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-'), dir=target))
+        for name, (old, unused_new, mode) in changes.items():
+            runtime.write_private(backup / name, old, mode)
+        with tempfile.TemporaryDirectory(prefix='.runtime-update-', dir=target) as temporary:
+            staged = Path(temporary)
+            (staged / 'new').mkdir(mode=0o700)
+            (staged / 'old').mkdir(mode=0o700)
+            for name, (old, new, mode) in changes.items():
+                runtime.write_private(staged / 'new' / name, new, mode)
+                runtime.write_private(staged / 'old' / name, old, mode)
+            replaced = []
+            try:
+                for name, (old, unused_new, mode) in changes.items():
+                    if runtime.read_regular(target / name, private=True) != (old, mode):
+                        raise ValueError('Installed runtime changed before replacement: ' + name)
+                    os.replace(staged / 'new' / name, target / name)
+                    replaced.append(name)
+            except BaseException:
+                failures = []
+                for name in reversed(replaced):
+                    try:
+                        os.replace(staged / 'old' / name, target / name)
+                    except OSError:
+                        failures.append(name)
+                if failures:
+                    raise RuntimeError('Update failed and automatic rollback was incomplete; restore from ' + str(backup)) from None
+                raise
+    finally:
+        os.close(descriptor)
+        try:
+            info = lock.lstat()
+            if (info.st_dev, info.st_ino) == (owned_lock.st_dev, owned_lock.st_ino):
+                lock.unlink()
+        except FileNotFoundError:
+            pass
+    print('Updated HardwareOne runtime files. Backup: ' + str(backup))
+    print('Private configuration, credentials, identity and relay are unchanged. Restart only the Terminal host using its existing launch method.')
+    return True
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--directory', type=Path, default=Path.home() / '.local/share/hardwareone-even-terminal')
+    parser.add_argument('--directory', type=Path, default=runtime.DEFAULT_DIRECTORY)
+    parser.add_argument('--node', help='Node.js 22+ executable; defaults to node on PATH')
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     os.umask(0o077)
     try:
-        update(args.directory, Path(__file__).resolve().parent, args.check)
-    except (OSError, ValueError, TypeError) as error:
+        update(args.directory, Path(__file__).parent, args.check, args.node)
+    except (OSError, ValueError, RuntimeError) as error:
         parser.exit(1, 'Host update failed: ' + str(error) + '\n')
 
 

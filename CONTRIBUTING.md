@@ -1,13 +1,21 @@
 # Contributing
 
 Keep each decision with its owner: `relay/` owns authenticated HTTPS transport;
-`terminal/` owns the OpenClaw protocol adapter and bounded device presentation;
-`skills/` owns agent guidance; `launcher/macos/` owns optional local process
-controls. The firmware remains in the separate HardwareOne project.
+`terminal/` owns the first-party HTTP server, OpenClaw protocol adapter and
+bounded device presentation; `skills/` owns agent guidance; `launcher/macos/`
+owns optional local process controls. Firmware remains in HardwareOne.
 
-Preserve pairing, credentials, runtime paths, pinned upstream integrity and
-protocol identities unless an explicit migration is part of the change. Do not
-replace the Gateway's history, permissions or tools with parallel implementations.
+The Terminal runtime consists of `start.mjs`, `server.mjs`, `gateway.mjs`,
+`provider.mjs` and `device-api.mjs`. Keep its installation and updates offline
+and free of npm dependencies. Preserve the bounded `/api/hardwareone` contract
+and the pinned OpenClaw Gateway contract; do not add a general Gateway proxy.
+OpenClaw owns history, permissions and tools.
+
+Preserve pairing, credentials, configuration and protocol identities. Changing
+an existing runtime location requires an explicit migration that retains private
+state and updates its references. Verify installed module hashes before updates;
+do not overwrite unrecognized local changes or run fresh initialization as an
+update. Keep legacy host removal separate from first-party source updates.
 
 Run `npm test` after runtime or extraction changes. It uses Python standard
 library tests, OpenSSL and Node built-ins; no dependency install or live service

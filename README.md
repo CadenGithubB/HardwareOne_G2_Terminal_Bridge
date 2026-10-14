@@ -1,16 +1,15 @@
 # HardwareOne G2 Terminal Bridge
 
 A HardwareOne project that connects G2 glasses, through compatible HardwareOne
-firmware, to an OpenClaw agent. It brings the HTTPS relay, computer-side Terminal
-adapter, conversation skill and optional macOS launcher into one repository.
+firmware, to an OpenClaw agent. It brings the HTTPS relay, first-party Terminal
+server, conversation skill and optional macOS launcher into one repository.
 
-This is an independent project, not an Even Realities product. It integrates
-with the official Even Terminal server and keeps the upstream name where it
-identifies that dependency.
+This is an independent project, not an Even Realities product. Its Terminal
+server uses Node.js built-ins and does not depend on the Even Terminal package.
 
 ```text
 G2 glasses ↔ HardwareOne device ↔ HTTPS relay ↔ Terminal host ↔ local OpenClaw
-                                  └──────────→ legacy HTTP chat
+                                  └────────────→ legacy HTTP chat
 ```
 
 | Component | Purpose |
@@ -20,40 +19,45 @@ G2 glasses ↔ HardwareOne device ↔ HTTPS relay ↔ Terminal host ↔ local Op
 | [skills/terminal-conversation/](skills/terminal-conversation/SKILL.md) | Agent guidance for correctly formed questions and useful conversation after an answer. |
 | [launcher/macos/](launcher/macos/README.md) | Optional start/stop app and local setup help. |
 
-The host extensions include the latest question JSON suppression, accepted
-answer receipts and bounded answer replay. The conversation skill is new source
-in this repository; copying or cloning the repo does not install it into an
-agent or change a running deployment.
+The host suppresses raw question-tool JSON, displays accepted answers and
+replays recent answer receipts within bounded view capacity. OpenClaw remains
+the owner of conversation history, tools, permissions and execution.
 
 ## Requirements and setup
 
-Use Python 3.9+, OpenSSL, Node.js 22+ and npm. The currently supported upstream
-versions are **Even Terminal 0.10.5** and **OpenClaw 2026.9.4**, protocol 4.
-The installer verifies the official package integrity; the adapter checks the
-Gateway version. These pins describe supported versions, not the latest releases.
+Use Python 3.9+, OpenSSL and Node.js 22+. The supported Gateway is
+**OpenClaw 2026.9.4**, protocol 4; the adapter checks that version rather than
+guessing a different API. This pin describes compatibility, not the latest release.
+Terminal installation and updates copy first-party source offline, with no npm
+dependencies or package downloads. npm is only a convenience for the test scripts.
+
+For a new installation:
 
 1. Prepare the [relay](relay/README.md) with your host address and private
-   credentials. The documentation address `192.0.2.10` is an example; replace it
-   with the host's reachable address.
+   credentials. Documentation addresses such as `192.0.2.10` are examples.
 2. Install, initialize and pair the [Terminal host](terminal/README.md), then
    connect it to the existing relay using the supplied helper.
-3. Install the [conversation skill](docs/conversation-skill.md) into the agent's
-   workspace and add the short routing instruction there.
-4. Run the host and relay in the foreground, or use the optional
+3. Run the host and relay in the foreground, or configure the optional
    [macOS launcher](launcher/macos/README.md).
-5. Use compatible [HardwareOne firmware](https://github.com/CadenGithubB/HardwareOne)
-   to open Terminal on the glasses. Firmware and device-specific setup remain
-   in that separate repository.
+4. Use compatible [HardwareOne firmware](https://github.com/CadenGithubB/HardwareOne)
+   to open Terminal on the glasses. Firmware and device setup remain in that
+   separate repository.
 
-Existing installations retain `~/.openclaw/hardwareone-relay` and
-`~/.local/share/hardwareone-even-terminal`. These compatibility paths preserve
-pairing and private settings; the new repository name does not rename them.
-For an installed host update, follow [the update procedure](terminal/README.md#update-an-existing-hardware-one-host).
-Do not rerun first-install initialization over an existing installation.
+The Terminal host defaults to `~/.local/share/hardwareone-g2-terminal-bridge`;
+the relay uses `~/.openclaw/hardwareone-relay`. Existing first-party installations
+use the [update procedure](terminal/README.md#update-an-existing-first-party-host).
+An older package-based host requires [explicit migration](docs/migration.md)
+to preserve its paired identity, tokens and configuration. Do not initialize a
+replacement identity over an existing setup.
+
+The conversation skill is packaged source. Cloning, installing or updating this
+bridge does not activate it in an agent. See the optional
+[skill installation instructions](docs/conversation-skill.md) when you choose
+to use it.
 
 ## Development
 
-The source and tests need no npm dependency installation:
+No npm dependency installation is needed:
 
 ```sh
 npm test
@@ -66,15 +70,13 @@ verification. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Only source, generic examples and synthetic tests belong here. Keep credentials,
 private keys, deployment configuration, transcripts and diagnostics out of Git.
-The installer downloads the official server into a private runtime directory;
-that server and its dependencies are not vendored in this repository.
 
 ## Origin and license
 
-Extracted from the HardwareOne host integration, including pending fixes, with
-source provenance recorded in [docs/ORIGIN.md](docs/ORIGIN.md). Existing hardware
-firmware stays in HardwareOne. The original source checkout and running services
-are not changed by this extraction.
+The relay and protocol adapter originate in the HardwareOne host integration;
+the standalone HTTP server replaces its former package-based host. Historical
+extraction provenance is recorded in [docs/ORIGIN.md](docs/ORIGIN.md). Firmware
+stays in HardwareOne. Source changes alone do not migrate running services.
 
 Project source retains the [PolyForm Noncommercial 1.0.0 license](LICENSE.md).
-See [third-party notices](docs/THIRD_PARTY.md) for upstream dependencies.
+See [third-party notices](docs/THIRD_PARTY.md) for external components.

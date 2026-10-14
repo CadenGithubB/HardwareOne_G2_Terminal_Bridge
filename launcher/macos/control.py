@@ -13,7 +13,7 @@ import time
 HOME_DIR = Path.home()
 ROOT = HOME_DIR / 'Library/Application Support/HardwareOne Launcher'
 SPECS = {
-    'Terminal host': ['/usr/local/bin/node', str(HOME_DIR / '.local/share/hardwareone-even-terminal/start.mjs')],
+    'Terminal host': ['/usr/local/bin/node', str(HOME_DIR / '.local/share/hardwareone-g2-terminal-bridge/start.mjs')],
     'Relay': ['/usr/bin/python3', str(HOME_DIR / '.openclaw/hardwareone-relay/relay.py'), '--config', str(HOME_DIR / '.openclaw/hardwareone-relay/config.json')],
 }
 

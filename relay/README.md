@@ -198,8 +198,8 @@ credentials. They do not contact the host gateway or attached hardware.
 
 ## Native Terminal sessions
 
-The optional `/v1/terminal` route connects the P4 to the computer-side official
-Even Terminal server with the Hardware One OpenClaw provider. It supports the
+The optional `/v1/terminal` route connects the P4 to the computer-side
+first-party HardwareOne Terminal server with its OpenClaw adapter. It supports the
 bounded session browser/history/event/action contract in
 [`../terminal/DEVICE_API.md`](../terminal/DEVICE_API.md). The existing chat route
 continues to work. Terminal remains disabled until both optional configuration

@@ -1,7 +1,7 @@
 # Hardware One Terminal device API, schema 1
 
 The existing TLS relay accepts `POST /v1/terminal` with its device bearer token.
-It adds its configured `deviceId` and forwards only this API to the local Even
+It adds its configured `deviceId` and forwards only this API to the first-party
 Terminal server's `POST /api/hardwareone`, using a separate private bridge token.
 The Terminal server and OpenClaw Gateway listen on loopback. Neither Gateway
 credentials nor raw Gateway session keys are returned to the device.

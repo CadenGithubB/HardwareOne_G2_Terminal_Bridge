@@ -10,7 +10,7 @@ import { Gateway, createIdentity } from './gateway.mjs';
 import { createOpenClawProvider } from './provider.mjs';
 import { createDeviceApi } from './device-api.mjs';
 
-test('official provider: main-only resume, exact runs, offered decisions and uncertain disconnect', async () => {
+test('OpenClaw provider: main-only resume, exact runs, offered decisions and uncertain disconnect', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'hw1-terminal-test-'));
   const tokenFile = join(dir, 'token'), identityFile = join(dir, 'identity');
   writeFileSync(tokenFile, 'fixture-token', { mode: 0o600 }); createIdentity(identityFile);

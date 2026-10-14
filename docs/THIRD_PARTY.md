@@ -1,22 +1,22 @@
 # Third-party components
 
 HardwareOne G2 Terminal Bridge is independent of Even Realities and OpenClaw.
-Their names identify compatible products and dependencies, not project ownership.
+Their names identify compatible products, not project ownership.
 
-`terminal/install.py` downloads `@evenrealities/even-terminal` version 0.10.5
-from the npm registry, verifies its pinned SHA-512 archive integrity and exact
-source-file hashes, then applies the HardwareOne extension patches. It retains
-the upstream package and records installation provenance. This repository does
-not vendor that package, APKs, decompiled application code or installed binaries.
-Upstream software remains subject to its own distributed terms and notices.
+The Terminal server is first-party source using Node.js built-ins. Its installer
+and updater work offline. They do not download, patch or import the Even Terminal
+package, Express, cors, qrcode-terminal or other npm runtime dependencies. This
+repository does not vendor APKs, decompiled application code or installed binaries.
+An existing package-based installation is removed only through the explicit
+[migration procedure](migration.md).
 
-The retained server uses express 5.2.1, cors 2.8.6 and qrcode-terminal 0.12.0.
-The installer records the resolved npm lockfile in the private installation.
-Those dependencies are not included in this source repository.
-
-The adapter is verified against OpenClaw 2026.9.4, commit
+The adapter targets OpenClaw 2026.9.4, commit
 `3a9d69db306cd7f081e06254cb89c4bcc14a7107`, protocol 4. OpenClaw runs separately
-and retains ownership of agent tools, permissions, transcripts and execution.
+and owns agent tools, permissions, transcripts and execution.
 
-The root LICENSE.md applies to the first-party HardwareOne project source; it
-does not relicense any downloaded third-party packages.
+Node.js, Python and OpenSSL/LibreSSL are external runtime or setup tools. They
+and OpenClaw retain their own licenses and notices. This source repository does
+not redistribute those components.
+
+The root [LICENSE.md](../LICENSE.md) applies to first-party HardwareOne source;
+it does not relicense external software.

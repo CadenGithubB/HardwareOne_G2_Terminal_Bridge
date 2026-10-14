@@ -1,9 +1,14 @@
 # HardwareOne G2 Terminal host
 
-This extends the official **Even Terminal 0.10.5** computer server with an
-OpenClaw provider. The P4 reaches it through the existing restricted HTTPS
-relay; the server connects only to OpenClaw on `127.0.0.1`. A phone, Even
-account, public tunnel and cloud bridge are not part of this path.
+This first-party Node.js HTTP server connects HardwareOne's native G2 Terminal
+to OpenClaw. The P4 reaches `POST /api/hardwareone` through the existing
+restricted HTTPS relay; the server connects to OpenClaw on `127.0.0.1`.
+It uses Node.js built-ins, with no Even Terminal package or npm runtime dependencies.
+
+The flat runtime has five modules: `start.mjs`, `server.mjs`, `gateway.mjs`,
+`provider.mjs` and `device-api.mjs`. Installation and updates copy these files
+offline. A phone, Even account, public tunnel and cloud bridge are not part of
+this path.
 
 The Gateway contract is pinned to the installed **OpenClaw 2026.9.4**, commit
 `3a9d69db306cd7f081e06254cb89c4bcc14a7107`, protocol 4. These are verified
@@ -12,7 +17,7 @@ fails closed instead of guessing its API.
 
 ## What is implemented
 
-| Official bridge feature | OpenClaw mapping and limits |
+| Terminal feature | OpenClaw mapping and limits |
 |---|---|
 | Browse and resume | Existing, unarchived `main` / OpenClaw sessions; opaque handles retain the original Gateway identity. Choosing a session does not send a message. |
 | New conversation | Reserves a new `agent:main:openai-user:hw1:terminal:…` session; the first explicit prompt starts it. |
@@ -50,7 +55,11 @@ Approving a real Gateway request still has the effect described by that request.
 This follows the pinned Gateway's [send admission rule](https://github.com/openclaw/openclaw/blob/3a9d69db306cd7f081e06254cb89c4bcc14a7107/src/gateway/server-methods/chat-send-request.ts)
 and [cancellation vocabulary](https://github.com/openclaw/openclaw/blob/3a9d69db306cd7f081e06254cb89c4bcc14a7107/src/auto-reply/reply/abort-primitives.ts).
 
-## Install on the host
+## Install a new host
+
+For a package-based host that already has credentials and pairing, use the
+[migration procedure](../docs/migration.md) instead. Fresh initialization is
+only for a new setup.
 
 Keep `terminal/` and `relay/` beside one another in the copied kit. In a Terminal
 opened in this `terminal` directory, run:
@@ -58,19 +67,16 @@ opened in this `terminal` directory, run:
 ```sh
 node --version
 python3 install.py
-node "$HOME/.local/share/hardwareone-even-terminal/start.mjs" --init
+node "$HOME/.local/share/hardwareone-g2-terminal-bridge/start.mjs" --init
 ```
 
-Node.js **22 or newer**, npm and Python 3 are required. The installer verifies
-the official package's pinned SHA-512 integrity and the exact files it patches.
-It installs only the three runtime dependencies needed by the retained server,
-with npm lifecycle scripts, audit, funding and update notifications disabled.
-It saves the resulting lockfile and provenance. Failed installs remove their
-own staging directory; an existing installation is never overwritten. No
-service is started by installation or initialization.
+Node.js **22 or newer** and Python 3.9+ are required. No npm install, package
+archive or network access is needed. The installer records the five first-party
+module hashes and refuses an existing destination. Failed installs remove their
+own staging directory. Installation and initialization start no service.
 
 Private files are created under
-`~/.local/share/hardwareone-even-terminal/`:
+`~/.local/share/hardwareone-g2-terminal-bridge/`:
 
 - `hardwareone.json`: ports and absolute credential-file paths.
 - `gateway-identity.pem`: persistent Ed25519 identity used for normal pairing.
@@ -81,32 +87,39 @@ The Gateway token defaults to the already-saved
 in these private files; do not paste them into commands, chat or this repository.
 The existing relay device token and CA are retained.
 
-For a different install location, use `python3 install.py --directory PATH` and
-use that absolute path in the commands below. `--tarball PATH` accepts an
-already-downloaded official archive with the same mandatory integrity check.
+For a different install location, use `python3 install.py --directory PATH`
+and use that absolute path in the commands below. The installer and updater
+accept `--node PATH` when Node is not on `PATH`. Review the initialized
+configuration before pairing or starting the host.
 
-## Update an existing Hardware One host
+## Update an existing first-party host
 
-Stop the Terminal host with Ctrl-C, leave the relay running, and run these from
-the new kit's `terminal/` directory (or the small host-update folder):
+Wait until the Terminal host is idle, stop it with Ctrl-C, leave the relay
+running, and run these from the new kit's `terminal/` directory:
 
 ```sh
 python3 update.py --check && python3 update.py
-node "$HOME/.local/share/hardwareone-even-terminal/start.mjs"
+node "$HOME/.local/share/hardwareone-g2-terminal-bridge/start.mjs"
 ```
 
-This verifies the installed module hashes against their saved provenance,
-backs up the changed modules, and replaces only the Hardware One extensions.
-It preserves the configuration, paired identity, tokens and installed runtime
-dependencies. No reinstall, `--init`, relay restart or P4 flash is needed.
-Close and reopen Terminal in the glasses after restarting the host.
+For a custom installation, pass the same `--directory PATH` to both update
+commands and use its `start.mjs`. The updater verifies the installed runtime
+against its recorded module hashes before replacing source and saves a backup
+of changed files. Unexpected local changes stop the update for review. It
+preserves configuration, the paired identity and tokens. No `--init`, relay
+restart or P4 flash is needed. Close and reopen Terminal on the glasses after
+restarting the host.
+
+The updater accepts only the first-party layout. An older package-based host
+requires [migration](../docs/migration.md), including transfer of its existing
+private state and review of the obsolete runtime before removal.
 
 ## Pair the host through OpenClaw
 
 Run the private connection check:
 
 ```sh
-node "$HOME/.local/share/hardwareone-even-terminal/start.mjs" --check
+node "$HOME/.local/share/hardwareone-g2-terminal-bridge/start.mjs" --check
 ```
 
 It prints the **public device ID**, then either the granted scopes or a
@@ -123,7 +136,7 @@ request using the request ID shown in the list:
 
 ```sh
 openclaw devices approve REQUEST_ID
-node "$HOME/.local/share/hardwareone-even-terminal/start.mjs" --check
+node "$HOME/.local/share/hardwareone-g2-terminal-bridge/start.mjs" --check
 ```
 
 Replace `REQUEST_ID` with that request's ID. This is the normal Gateway pairing
@@ -142,7 +155,7 @@ From the copied kit's `terminal` directory:
 ```sh
 python3 enable_terminal.py --check
 python3 enable_terminal.py
-node "$HOME/.local/share/hardwareone-even-terminal/start.mjs"
+node "$HOME/.local/share/hardwareone-g2-terminal-bridge/start.mjs"
 ```
 
 The helper checks both configurations, saves private backups and updates the
@@ -166,36 +179,34 @@ Keep the private identity/configuration when updating so pairing survives.
 
 ## Local-only runtime boundary
 
-The launcher bypasses the official CLI and forces the OpenClaw provider and
-loopback bind. Other providers and their SDK/transports are not imported or
-constructed. Only the retained info/session/history/message/event/chat and
-Hardware One API routes are reachable. Update, debug, Claude hooks, Codex
-app-server startup, tunnel/expose and account-setup routes are blocked. Browser
-Origin requests and query-string tokens are rejected; use the authenticated
-relay. No secret-bearing startup banner or instance pidfile is written, and
-prompt/question payload logging is disabled.
+The first-party server binds to loopback. Its routes are the bounded
+`POST /api/hardwareone` device endpoint and `GET /healthz`, both authenticated
+with the private bridge bearer token. The health response identifies the
+service without contacting the Gateway. There are no generic Gateway RPC,
+provider-selection, account-setup, tunnel or update routes. Browser Origin
+requests and query-string tokens are rejected. No prompt/question payload
+logging is enabled.
+
 Failed device operations log only the operation, a fixed error category and a
 recognized Gateway error code. They never log upstream error messages, prompt
 text, session identities or credentials.
 
-At runtime this adapter's outbound connection is the local Gateway WebSocket.
-Installing dependencies contacts the npm registry. OpenClaw's own allowed tools
-may use the network under its existing policy; this adapter does not rewrite
-that policy. The official source is retained for provenance, including unused
-modules, but its other provider imports and outbound startup actions are gated
-out of this launch path.
+The host's outbound connection is the local Gateway WebSocket. Installation and
+updates do not contact a package registry. OpenClaw's own allowed tools may use
+the network under its existing policy; this bridge does not rewrite that policy.
+The packaged conversation skill is activated only by a separate, explicit
+[workspace installation](../docs/conversation-skill.md).
 
 ## Verification and current limits
 
-`node --test test_provider.mjs` exercises the production provider and Gateway
-codec with a fake WebSocket peer: Ed25519 handshake, fixed-agent routing,
-idempotent sends, tool events, offered decisions, history/stream races through
-the real device API, uncertain disconnect and bounded cache retirement.
-`node --test tests/device-api.test.mjs` covers the bounded device contract.
-A separate temporary HTTP smoke test exercised the patched official server,
-real Express dependencies, authentication, blocked routes and device history.
-These are host-side checks; host pairing and a real P4 round trip remain
-separate qualification steps.
+From the repository root, run `npm run test:terminal` to exercise the provider,
+Gateway codec, device API and first-party HTTP boundary with local test doubles.
+The provider tests cover the Ed25519 handshake, fixed-agent routing, idempotent
+sends, tool events, offered decisions, history/stream races, uncertain disconnect
+and bounded cache retirement. The device tests cover the bounded wire contract,
+accepted-answer receipts and replay capacity. No dependency installation or
+live Gateway is needed. Host pairing and a real P4 round trip remain separate
+qualification steps.
 
 The P4's voice input accepts at most **512 UTF-8 bytes** per confirmed prompt,
 and the native view retains **64 content items**. Longer replies use successive

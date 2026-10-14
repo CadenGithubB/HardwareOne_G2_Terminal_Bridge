@@ -34,7 +34,7 @@ def main(argv=None):
     parser.add_argument("--relay-config", type=Path,
                         default=Path.home()/".openclaw/hardwareone-relay/config.json")
     parser.add_argument("--terminal-directory", type=Path,
-                        default=Path.home()/".local/share/hardwareone-even-terminal")
+                        default=Path.home()/".local/share/hardwareone-g2-terminal-bridge")
     parser.add_argument("--check", action="store_true", help="Validate without saving any files")
     args = parser.parse_args(argv)
     os.umask(0o077)

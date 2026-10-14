@@ -5,8 +5,8 @@ exact process arguments and refuses duplicate starts. It does not start at login
 force-kill a process, or alter the OpenClaw Gateway. Install and pair the services
 first using the repository's relay and Terminal instructions.
 
-`control.py` uses the existing compatibility installation paths and expects Node
-at `/usr/local/bin/node` and Python at `/usr/bin/python3`. Check those executable
+`control.py` uses `~/.local/share/hardwareone-g2-terminal-bridge/` for the
+first-party Terminal runtime and expects Node at `/usr/local/bin/node` and Python at `/usr/bin/python3`. Check those executable
 paths in `SPECS` for your host before installing. The commands run as the current
 user and read private runtime configuration at execution time.
 
