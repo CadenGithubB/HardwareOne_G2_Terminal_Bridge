@@ -37,7 +37,7 @@ def main(action):
         return
     config, url = settings()
     if action == 'summary':
-        print('Everyday use: Start both, wake the P4 and glasses, then open Terminal from the glasses side menu. The P4 needs Wi-Fi access to this host.\n\nOnce setup and pairing are complete, normal use needs no key entry.\n\nDevice endpoint: ' + url + '\nModel: openclaw/main\n\nIf setup asks for a key, use the relay device key. Copy device key places it on this Mac’s clipboard for private entry on the P4. It is not your OpenClaw Gateway token or device login password.\n\nAfter a host restart, close and reopen Terminal on the glasses.')
+        print('HardwareOne Connect controls the HardwareOne relay and Terminal host.\n\nEveryday use: Start both, wake the P4 and glasses, then open Terminal from the glasses side menu. The P4 needs Wi-Fi access to this host.\n\nOnce setup and pairing are complete, normal use needs no key entry.\n\nDevice endpoint: ' + url + '\nModel: openclaw/main\n\nIf setup asks for a key, use the relay device key. Copy device key places it on this Mac’s clipboard for private entry on the P4. It is not your OpenClaw Gateway token or device login password.\n\nAfter a host restart, close and reopen Terminal on the glasses.')
     elif action == 'copy-key':
         token = private_bytes(Path(config['device_token_file'])).strip()
         if not 32 <= len(token) <= 4096 or any(c < 33 or c > 126 for c in token):

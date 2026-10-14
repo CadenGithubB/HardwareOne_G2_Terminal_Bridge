@@ -25,7 +25,7 @@ function reportFailure(op, error) {
   const gateway = error?.gatewayCode === undefined ? 'none' : GATEWAY_CODES.has(error.gatewayCode) ? error.gatewayCode : 'OTHER';
   console.error(`[Hardware One Terminal] op=${operation} error=${category} gateway=${gateway}`);
 }
-function chunks(value, limit = 512) {
+function byteChunks(value, limit = 512) {
   const result = []; let part = '', n = 0;
   for (const cp of value) {
     const size = bytes(cp);
@@ -35,7 +35,34 @@ function chunks(value, limit = 512) {
   if (part) result.push(part);
   return result;
 }
-function title(value) { return chunks(String(value || 'OpenClaw conversation'), 64)[0] || 'OpenClaw'; }
+function chunks(value, compact = false) {
+  if (compact) return byteChunks(value);
+  const result = []; let start = 0;
+  while (start < value.length) {
+    let end = start, size = 0;
+    while (end < value.length) {
+      const cp = value.codePointAt(end), n = cp <= 0x7f ? 1 : cp <= 0x7ff ? 2 : cp <= 0xffff ? 3 : 4;
+      if (size + n > 512) break;
+      size += n; end += cp > 0xffff ? 2 : 1;
+    }
+    if (end < value.length) {
+      // Native items are separate display blocks. Prefer complete paragraphs,
+      // then lines and words; keep every original separator in the old block.
+      if (value[end - 1] === '\r' && value[end] === '\n') end--;
+      const prefix = value.slice(start, end); let cut = 0;
+      for (const match of prefix.matchAll(/\n[\t \r]*\n(?:[\t \r]*\n)*/gu)) cut = match.index + match[0].length;
+      if (!cut) cut = Math.max(prefix.lastIndexOf('\n'), prefix.lastIndexOf('\r')) + 1;
+      if (!cut) for (const match of prefix.matchAll(/\s/gu)) cut = match.index + match[0].length;
+      if (cut) end = start + cut;
+    }
+    result.push(value.slice(start, end)); start = end;
+    // Keep the existing event cost for unusually large output. Byte packing
+    // still preserves all text and complete code points within the wire cap.
+    if (result.length > MAX_CONTENT / 512) return byteChunks(value);
+  }
+  return result;
+}
+function title(value) { return byteChunks(String(value || 'OpenClaw conversation'), 64)[0] || 'OpenClaw'; }
 const QUESTION_TOOLS = new Set(['ask_user', 'openclaw:core:ask_user']);
 function isQuestionTool(event, name) {
   if (QUESTION_TOOLS.has(name)) return true;
@@ -93,7 +120,7 @@ export function createDeviceApi(provider) {
       event(v, { type: 'host_required', text: 'This output exceeds the device view limit. Open the OpenClaw dashboard.' }); return;
     }
     if (!v.items.has(key) && v.items.size >= MAX_ITEMS) fail('reopen_required', 'This view reached its item limit; reopen recent history');
-    const parts = chunks(value), old = v.items.get(key) || [];
+    const parts = chunks(value, v.compact), old = v.items.get(key) || [];
     for (let i = 0; i < Math.max(old.length, parts.length); ++i) {
       const part = parts[i] || '';
       if (!old[i]) old[i] = { id: ++v.nextItem, text: null };
@@ -229,31 +256,40 @@ export function createDeviceApi(provider) {
     const initial = await provider.getDeviceHistorySnapshot(id, 10);
     if (provider.getInstanceId() !== captured) fail('reopen_required', 'Gateway reconnected; reopen this conversation');
     const snapshot = initial.snapshot;
-    const v = { id: nonce(), sessionId: id, cursor: 0, nextItem: 0, sourceCursor: snapshot.cursor,
-      events: [], items: new Map(), live: new Map(), pending: new Map() };
-    for (const [i, m] of initial.history.entries()) {
-      const key = m.runId ? `${m.role === 'user' ? 'user' : 'assistant'}:${m.runId}` : `history:${m.id || i}`;
-      content(v, key, m.role === 'user' ? 1 : m.role === 'tool' ? 3 : 2, m.text);
-    }
-    if (snapshot.runId && typeof initial.liveText === 'string' && initial.liveText) {
-      v.live.set(snapshot.runId, initial.liveText); content(v, `assistant:${snapshot.runId}`, 2, initial.liveText);
-    }
-    for (const p of initial.pendingEvents || []) project(v, p);
-    for (const p of initial.recentToolEvents || []) project(v, p);
-    for (const p of initial.recentProgressEvents || []) project(v, p);
-    // Replayed receipts are optional presentation history. Keep complete newest
-    // receipts only where they fit, reserving the final state event. They must
-    // not evict the initial cursor or any history/pending controls during open.
-    const receipts = [];
-    let eventSpace = MAX_EVENTS - v.events.length - 1, itemSpace = MAX_ITEMS - v.items.size;
-    for (const answer of (initial.recentAnswerEvents || []).slice(-8).reverse()) {
-      const items = answerItems(answer), cost = items.reduce((n, item) => n + chunks(item.text).length, 0);
-      if (items.length && cost <= eventSpace && items.length <= itemSpace) {
-        receipts.unshift(items); eventSpace -= cost; itemSpace -= items.length;
+    function build(compact) {
+      const v = { id: nonce(), sessionId: id, cursor: 0, nextItem: 0, sourceCursor: snapshot.cursor,
+        compact, events: [], items: new Map(), live: new Map(), pending: new Map() };
+      for (const [i, m] of initial.history.entries()) {
+        const key = m.runId ? `${m.role === 'user' ? 'user' : 'assistant'}:${m.runId}` : `history:${m.id || i}`;
+        content(v, key, m.role === 'user' ? 1 : m.role === 'tool' ? 3 : 2, m.text);
       }
+      if (snapshot.runId && typeof initial.liveText === 'string' && initial.liveText) {
+        v.live.set(snapshot.runId, initial.liveText); content(v, `assistant:${snapshot.runId}`, 2, initial.liveText);
+      }
+      for (const p of initial.pendingEvents || []) project(v, p);
+      for (const p of initial.recentToolEvents || []) project(v, p);
+      for (const p of initial.recentProgressEvents || []) project(v, p);
+      // Replayed receipts are optional presentation history. Keep complete newest
+      // receipts only where they fit, reserving the final state event. They must
+      // not evict the initial cursor or any history/pending controls during open.
+      const receipts = [];
+      let eventSpace = MAX_EVENTS - v.events.length - 1, itemSpace = MAX_ITEMS - v.items.size;
+      for (const answer of (initial.recentAnswerEvents || []).slice(-8).reverse()) {
+        const items = answerItems(answer), cost = items.reduce((n, item) => n + chunks(item.text, compact).length, 0);
+        if (items.length && cost <= eventSpace && items.length <= itemSpace) {
+          receipts.unshift(items); eventSpace -= cost; itemSpace -= items.length;
+        }
+      }
+      for (const items of receipts) for (const item of items) content(v, item.key, 5, item.text);
+      event(v, { type: 'state', state: snapshot.uncertain ? 'uncertain' : snapshot.state, runId: snapshot.runId, ...activityFields(snapshot) });
+      return v;
     }
-    for (const items of receipts) for (const item of items) content(v, item.key, 5, item.text);
-    event(v, { type: 'state', state: snapshot.uncertain ? 'uncertain' : snapshot.state, runId: snapshot.runId, ...activityFields(snapshot) });
+    let v = build(false);
+    // Natural boundaries can add blocks to an otherwise valid crowded replay.
+    // Retry once with the old packing before exposing any view or cursor.
+    if (v.cursor > MAX_EVENTS) v = build(true);
+    if (v.cursor > MAX_EVENTS) fail('host_required', 'This history needs the OpenClaw dashboard');
+    delete v.compact;
     d.view = v;
     // Retired view actions carry an invalid view token, so their response cache
     // can go immediately. Keep selection responses separately and bounded.

@@ -5,7 +5,7 @@ on run
     try
         repeat
             set currentStatus to do shell script commandBase & " status"
-            set answer to display dialog currentStatus & return & return & "Start or stop the relay and Terminal host together. Nothing starts automatically at login. Click ? for setup, the device key, or to close." with title "HardwareOne G2 Terminal Bridge" buttons {"?", "Stop both", "Start both"} default button "Start both"
+            set answer to display dialog currentStatus & return & return & "Start or stop the HardwareOne relay and Terminal host together. Nothing starts automatically at login. Click ? for setup, the device key, or to close." with title "HardwareOne G2 Terminal Bridge" buttons {"?", "Stop both", "Start both"} default button "Start both"
             set selectedAction to button returned of answer
             if selectedAction is "?" then
                 set helpText to do shell script helpCommand & " summary"

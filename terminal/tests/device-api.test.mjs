@@ -381,3 +381,115 @@ test('unaccepted, cancelled and externally resolved questions never invent an an
     assert.deepEqual((await run.drain(selected)).events.filter(e => e.type === 'content' && e.kind === 5), []);
   }
 });
+
+test('paragraph boundaries keep contractions and ordinary phrases together across old byte cuts', async () => {
+  const prefix = ('A'.repeat(398) + '\n\n').repeat(3);
+  for (const [paragraph, beforeCut, phrase] of [
+    ['music '.repeat(55) + "And it's a good evening.", 'music '.repeat(55) + 'And it', "it's"],
+    ['notes '.repeat(55) + 'we who love a quiet tune can stay.', 'notes '.repeat(55) + 'we who', 'who love'],
+  ]) {
+    const source = prefix + paragraph;
+    assert.equal(Buffer.byteLength(prefix + beforeCut), 1536);
+    assert(Buffer.byteLength(paragraph) < 512);
+    const f = fixture([{ role: 'assistant', text: source }]);
+    const parts = (await f.drain(await f.open())).events.filter(e => e.type === 'content');
+    assert.equal(parts.map(e => e.text).join(''), source);
+    assert(parts.some(e => e.text === paragraph && e.text.includes(phrase)), 'the final short paragraph stays in one native item');
+    assert(parts.every(e => Buffer.byteLength(e.text) <= 512));
+  }
+});
+
+test('natural content splitting preserves UTF-8, CRLF, tabs and spaces; titles retain byte clipping', async () => {
+  const source = ('α 😀  \t'.repeat(20) + '\r\n\r\n').repeat(4) + "I'd hear D'Angelo again.\n  Keep these spaces.  \n";
+  const f = fixture([{ role: 'assistant', text: source }]);
+  const parts = (await f.drain(await f.open())).events.filter(e => e.type === 'content');
+  assert.equal(parts.map(e => e.text).join(''), source);
+  assert(parts.every(e => Buffer.byteLength(e.text) <= 512 && !e.text.includes('\ufffd') && !e.text.endsWith('\r')));
+  const label = 'Short heading\n' + 'x'.repeat(80);
+  f.provider.listSessions = async () => [{ id: SESSION, title: label, status: 'idle' }];
+  assert.equal((await f.call('list', { offset: 0, limit: 1 })).sessions[0].title, label.slice(0, 64));
+});
+
+test('long paragraphs split at whitespace and oversized words retain complete code points', async () => {
+  const prose = "It's a soft tune with a clear melody. ".repeat(60);
+  const f = fixture([{ role: 'assistant', text: prose }]);
+  const parts = (await f.drain(await f.open())).events.filter(e => e.type === 'content');
+  assert.equal(parts.map(e => e.text).join(''), prose);
+  assert(parts.length > 2);
+  assert(parts.slice(0, -1).every(e => /\s$/u.test(e.text)), 'ordinary words stay whole when a whitespace boundary is available');
+  for (const longWord of ['x'.repeat(1800), '😀'.repeat(450)]) {
+    const word = fixture([{ role: 'assistant', text: longWord }]);
+    const split = (await word.drain(await word.open())).events.filter(e => e.type === 'content');
+    assert.equal(split.map(e => e.text).join(''), longWord);
+    assert(split.every(e => Buffer.byteLength(e.text) <= 512 && !e.text.includes('\ufffd')));
+  }
+});
+
+test('streaming reflow reuses item IDs and shrinking retires all prior tail pieces', async () => {
+  const f = fixture(), view = await f.open(); let { after } = await f.drain(view);
+  const items = new Map();
+  async function consume() {
+    const events = [];
+    for (let i = 0; i < 100; i++) {
+      const r = await f.call('poll', { ...view, after }); assert(r.ok); after = r.cursor;
+      events.push(...r.events);
+      for (const e of r.events) if (e.type === 'content') items.set(e.itemId, e.text);
+      if (!r.more) return events;
+    }
+    throw Error('stream did not drain');
+  }
+  const prefix = 'word '.repeat(102);
+  f.emit({ type: 'text_delta', runId: 'reflow', text: prefix + 'it' });
+  const initial = (await consume()).filter(e => e.type === 'content'); assert.equal(initial.length, 1);
+  f.emit({ type: 'text_delta', runId: 'reflow', text: "'s a gentle melody. " + 'More words. '.repeat(60) });
+  const expanded = await consume();
+  assert(expanded.some(e => e.type === 'content' && e.itemId === initial[0].itemId));
+  assert([...items.values()].some(value => value.startsWith("it's a gentle melody.")));
+  assert.equal([...items.values()].join(''), prefix + "it's a gentle melody. " + 'More words. '.repeat(60));
+  const ids = [...items.keys()]; assert(ids.length > 2);
+  f.emit({ type: 'text_replace', runId: 'reflow', text: 'Brief reply.' });
+  const retired = await consume();
+  assert.equal(items.get(ids[0]), 'Brief reply.');
+  assert(ids.slice(1).every(id => retired.some(e => e.itemId === id && e.text === '')));
+  assert.equal([...items.values()].join(''), 'Brief reply.');
+});
+
+test('dense paragraphs and crowded initial history retain complete text within the event window', async () => {
+  const dense = ('D'.repeat(255) + '\n\n').repeat(510);
+  assert(Buffer.byteLength(dense) <= 128 * 1024);
+  const f = fixture([{ role: 'assistant', text: dense }]);
+  const denseEvents = (await f.drain(await f.open())).events;
+  assert.equal(denseEvents.filter(e => e.type === 'content').map(e => e.text).join(''), dense);
+  assert(denseEvents.length <= 257, 'very large text retains the existing per-message piece budget');
+  const history = 'H'.repeat(128 * 1024), tools = Array.from({ length: 30 }, (_, i) => ({
+    type: 'tool_end', name: `tool_${i}`, toolId: `tool_${i}`, text: 'T'.repeat(4048),
+  }));
+  f.provider.getDeviceHistorySnapshot = async () => ({ history: [{ role: 'assistant', text: history }],
+    snapshot: { runId: 'run', state: 'awaiting', cursor: 0 }, recentToolEvents: tools,
+    pendingEvents: [{ type: 'user_question', requestId: 'still-pending', expiresAtMs: Date.now() + 60000,
+      questions: [{ questionId: 'q', question: 'Keep this choice', options: [{ label: 'Continue' }] }] }],
+    recentAnswerEvents: [{ type: 'question_answer', requestId: 'recent-answer', status: 'answered',
+      answers: [{ question: 'Earlier choice?', values: ['Yes'] }] }],
+  });
+  const events = (await f.drain(await f.open())).events;
+  assert(events.length <= 512);
+  assert.deepEqual(events.map(e => e.id), Array.from({ length: events.length }, (_, i) => i + 1));
+  assert.equal(events.filter(e => e.kind === 2).map(e => e.text).join(''), history);
+  assert.equal(events.filter(e => e.kind === 3).map(e => e.text).join(''), tools.map(e => `${e.name}\nFinished\n${e.text}`).join(''));
+  assert.equal(events.filter(e => e.type === 'query').length, 1);
+  assert(events.some(e => e.kind === 5 && e.text === 'Earlier choice?\nYou: Yes'));
+  assert.equal(events.at(-1).type, 'state');
+});
+
+
+test('initial history that exceeds even compact capacity fails before replacing a valid view', async () => {
+  const f = fixture(), selected = await f.open();
+  f.provider.getDeviceHistorySnapshot = async () => ({ history: [
+    { role: 'assistant', text: 'A'.repeat(128 * 1024) },
+    { role: 'assistant', text: 'B'.repeat(128 * 1024) },
+  ], snapshot: { runId: null, state: 'idle', cursor: 0 } });
+  const rejected = await f.call('open', { sessionId: SESSION });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error.code, 'host_required');
+  assert((await f.call('poll', { ...selected, after: 0 })).ok, 'the previous view remains usable');
+});

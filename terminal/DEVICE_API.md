@@ -71,10 +71,20 @@ Each event has monotonic `id`. The following forms are defined:
   content item. `itemId` is in 1–0x7fffffff local to this view; the high bit is
   reserved for device presentation notices. `kind` is 1 user,
   2 assistant, 3 tool, 4 query, 5 answer. `text` is at most 512 UTF-8 bytes,
-  split only between complete code points. A streaming tail keeps the same
-  item ID until it reaches capacity. Longer text gets successive items; it is
-  not truncated to one lens page. A replacement that shortens a previous
-  answer emits empty updates for retired tail items.
+  split at paragraph breaks where possible, then line breaks, then whitespace.
+  Words longer than one item split between complete code points. All original
+  text and whitespace are preserved. Native items are separate display blocks;
+  paragraphs longer than 512 bytes still span multiple blocks. Streaming
+  updates reuse item IDs by position and can move a partial word into the next
+  item. A replacement that shortens a previous answer emits empty updates for
+  retired tail items. Text is never truncated to one lens page.
+
+  To retain the existing bounded event cost, output needing more than 256
+  naturally split items uses compact code-point-safe byte packing. A crowded
+  initial history projection also retries with compact packing if natural
+  boundaries exceed the 512-event window. If even compact history cannot fit,
+  opening returns `host_required` instead of losing the beginning of the view.
+  Session titles keep their separate 64-byte clipping behavior.
 * `{id,type:"state",state,runId,activity?}`: `state` is `idle`, `busy`, `awaiting`, or
   `uncertain`. A run ID is an exact host-issued identity, never a guessed
   "latest" run. Interrupt applies only to that run, preserving side runs.
