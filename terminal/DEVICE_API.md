@@ -71,7 +71,9 @@ Each event has monotonic `id`. The following forms are defined:
   content item. `itemId` is in 1–0x7fffffff local to this view; the high bit is
   reserved for device presentation notices. `kind` is 1 user,
   2 assistant, 3 tool, 4 query, 5 answer. `text` is at most 512 UTF-8 bytes,
-  split at paragraph breaks where possible, then line breaks, then whitespace.
+  split at paragraph breaks where possible, then explicit line breaks. Long
+  paragraphs use complete native visual lines where the glyphs are measured;
+  other text falls back to whitespace boundaries.
   Words longer than one item split between complete code points. All original
   text and whitespace are preserved. Native items are separate display blocks;
   paragraphs longer than 512 bytes still span multiple blocks. Streaming
@@ -85,6 +87,20 @@ Each event has monotonic `id`. The following forms are defined:
   boundaries exceed the 512-event window. If even compact history cannot fit,
   opening returns `host_required` instead of losing the beginning of the view.
   Session titles keep their separate 64-byte clipping behavior.
+
+  The layout profile is measured from the supported G2 firmware **2.3.2.14**:
+  538-pixel content width, 27-pixel font height plus one pixel of line spacing,
+  and LVGL 9.3 word wrapping. The host accounts for integer glyph advances and
+  pair kerning, and rechecks a proposed final line with no following character.
+  Several complete lines share each block; this does not create one item per
+  line. Printable ASCII except backtick, common smart punctuation, NBSP and
+  the measured control characters are covered. Unmeasured glyphs (including
+  external-font fallbacks) retain lossless word/code-point splitting. Compact
+  capacity fallback also retains byte packing, so those cases can still show
+  a short line at a block boundary. No font artwork or vendor runtime is used.
+  The wrapping rules were cross-checked against the [LVGL 9.3 source](https://github.com/lvgl/lvgl/blob/v9.3.0/src/misc/lv_text.c).
+  Offline tests confirm text and line-boundary behavior; on-glasses appearance
+  remains a separate hardware check.
 * `{id,type:"state",state,runId,activity?}`: `state` is `idle`, `busy`, `awaiting`, or
   `uncertain`. A run ID is an exact host-issued identity, never a guessed
   "latest" run. Interrupt applies only to that run, preserving side runs.

@@ -444,7 +444,7 @@ test('streaming reflow reuses item IDs and shrinking retires all prior tail piec
   f.emit({ type: 'text_delta', runId: 'reflow', text: "'s a gentle melody. " + 'More words. '.repeat(60) });
   const expanded = await consume();
   assert(expanded.some(e => e.type === 'content' && e.itemId === initial[0].itemId));
-  assert([...items.values()].some(value => value.startsWith("it's a gentle melody.")));
+  assert([...items.values()].some(value => value.includes("it's a gentle melody.")));
   assert.equal([...items.values()].join(''), prefix + "it's a gentle melody. " + 'More words. '.repeat(60));
   const ids = [...items.keys()]; assert(ids.length > 2);
   f.emit({ type: 'text_replace', runId: 'reflow', text: 'Brief reply.' });
@@ -492,4 +492,75 @@ test('initial history that exceeds even compact capacity fails before replacing 
   assert.equal(rejected.ok, false);
   assert.equal(rejected.error.code, 'host_required');
   assert((await f.call('poll', { ...selected, after: 0 })).ok, 'the previous view remains usable');
+});
+
+// Golden boundaries were checked against upstream LVGL 9.3 C with the
+// independently recovered G2 2.3.2.14 advances, kerning and wrapping settings.
+const WRAP_PARAGRAPH = "On a quiet afternoon, the small reading room feels calm and familiar, with a bright window, a wooden table, and a comfortable chair beside a shelf of old books. A visitor can settle into the chair, open a favorite story, and follow its characters through a distant city while the light moves slowly across the floor and the sounds outside fade into the background. The important point of this example is that the words continue as one ordinary paragraph, with complete sentences and normal spaces, so a sudden short line in the middle of a sentence cannot be explained by an intentional paragraph break in the source text. When the story reaches a lively conversation, the reader should be able to follow the exchange naturally from one line to the next, without a transport boundary making the paragraph look as though the writer pressed Return halfway through a thought.";
+
+test('long paragraphs end native blocks on complete visual lines', async () => {
+  const f = fixture([{ role: 'assistant', text: WRAP_PARAGRAPH }]);
+  const parts = (await f.drain(await f.open())).events.filter(e => e.type === 'content');
+  assert.equal(parts.map(e => e.text).join(''), WRAP_PARAGRAPH);
+  assert.deepEqual(parts.map(e => Buffer.byteLength(e.text)), [469, 403]);
+  // Full-source line ends: 60,114,175,236,299,353,413,469,528,587,
+  // 648,709,765,824,872. Rendering these two blocks preserves every end;
+  // the former 510-byte first block forced an early end inside that line.
+  assert(parts.every(e => !/[\r\n]/u.test(e.text)));
+});
+
+test('line-aligned streaming preserves text and avoids resending completed prefix blocks', async () => {
+  const f = fixture(), view = await f.open(); let { after } = await f.drain(view);
+  let sent = 0; const items = new Map();
+  async function consume() {
+    const events = [];
+    for (let i = 0; i < 20; i++) {
+      const r = await f.call('poll', { ...view, after }); assert(r.ok); after = r.cursor;
+      for (const e of r.events) if (e.type === 'content') { items.set(e.itemId, e.text); events.push(e); }
+      if (!r.more) return events;
+    }
+    throw Error('stream did not drain');
+  }
+  for (const end of [510, 515, 700, WRAP_PARAGRAPH.length]) {
+    f.emit({ type: 'text_delta', runId: 'line-wrap', text: WRAP_PARAGRAPH.slice(sent, end) });
+    const updates = await consume();
+    assert.equal([...items.values()].join(''), WRAP_PARAGRAPH.slice(0, end));
+    assert([...items.values()].every(value => Buffer.byteLength(value) <= 512));
+    if (sent >= 515) assert(updates.every(e => e.itemId !== 1), 'the completed first block is unchanged');
+    if (end > 512) assert.equal(items.get(1), WRAP_PARAGRAPH.slice(0, 469));
+    sent = end;
+  }
+  assert.deepEqual([...items.values()].map(value => Buffer.byteLength(value)), [469, 403]);
+  f.emit({ type: 'result', runId: 'line-wrap', text: WRAP_PARAGRAPH });
+  assert.deepEqual(await consume(), [], 'the identical final text needs no replacements');
+});
+
+test('unmeasured glyphs keep lossless bounded fallback', async () => {
+  const raw = ('`café` 😀 e\u0301 日本語 ' + 'words '.repeat(20)).repeat(12);
+  const f = fixture([{ role: 'assistant', text: raw }]);
+  const parts = (await f.drain(await f.open())).events.filter(e => e.type === 'content');
+  assert.equal(parts.map(e => e.text).join(''), raw);
+  assert(parts.every(e => Buffer.byteLength(e.text) <= 512 && !e.text.includes('\ufffd')));
+});
+
+test('native line alignment accounts for kerning, smart punctuation and zero-width tabs', async () => {
+  for (const [raw, lengths] of [
+    ['AVATAR To WA; thin iii, wide WWW. '.repeat(28), [510, 442]],
+    ['“We’ll hear jazz”—a quiet tune… '.repeat(24), [454, 456, 98]],
+    ['A\tV To\tWA '.repeat(80), [480, 320]],
+  ]) {
+    const f = fixture([{ role: 'assistant', text: raw }]);
+    const parts = (await f.drain(await f.open())).events.filter(e => e.type === 'content');
+    assert.equal(parts.map(e => e.text).join(''), raw);
+    assert.deepEqual(parts.map(e => Buffer.byteLength(e.text)), lengths);
+  }
+});
+
+test('a maximum-size zero-width run keeps the bounded compact projection', async () => {
+  const raw = '\t'.repeat(128 * 1024);
+  const f = fixture([{ role: 'assistant', text: raw }]);
+  const parts = (await f.drain(await f.open())).events.filter(e => e.type === 'content');
+  assert.equal(parts.map(e => e.text).join(''), raw);
+  assert.equal(parts.length, 256);
+  assert(parts.every(e => Buffer.byteLength(e.text) === 512));
 });

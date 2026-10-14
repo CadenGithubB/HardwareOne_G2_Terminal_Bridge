@@ -25,6 +25,172 @@ function reportFailure(op, error) {
   const gateway = error?.gatewayCode === undefined ? 'none' : GATEWAY_CODES.has(error.gatewayCode) ? error.gatewayCode : 'OTHER';
   console.error(`[Hardware One Terminal] op=${operation} error=${category} gateway=${gateway}`);
 }
+// Measured integer glyph advances and pair adjustments for G2 2.3.2.14.
+// These are layout measurements, not font artwork or a vendor runtime.
+// The native Terminal uses a 538px label, LVGL 9.3 wrapping and a 28px row
+// pitch. Only verified glyphs are measured; unfamiliar text keeps the safe
+// paragraph/line/word fallback below. See DEVICE_API.md for the profile.
+const G2_GLYPH_WIDTH = {"0":0,"9":0,"10":0,"13":0,"32":5,"33":4,"34":6,"35":15,"36":13,"37":14,"38":16,"39":4,"40":7,"41":7,"42":8,"43":10,"44":5,"45":10,"46":5,"47":8,"48":12,"49":8,"50":12,"51":12,"52":13,"53":12,"54":12,"55":13,"56":12,"57":12,"58":4,"59":5,"60":10,"61":10,"62":10,"63":12,"64":17,"65":14,"66":12,"67":12,"68":12,"69":11,"70":11,"71":12,"72":12,"73":6,"74":9,"75":12,"76":10,"77":16,"78":12,"79":12,"80":12,"81":12,"82":12,"83":12,"84":12,"85":12,"86":14,"87":16,"88":14,"89":14,"90":13,"91":7,"92":8,"93":7,"94":10,"95":9,"97":12,"98":11,"99":11,"100":11,"101":11,"102":10,"103":11,"104":11,"105":4,"106":7,"107":10,"108":4,"109":16,"110":11,"111":11,"112":11,"113":11,"114":8,"115":11,"116":8,"117":12,"118":12,"119":16,"120":12,"121":12,"122":10,"123":9,"124":4,"125":9,"126":16,"160":5,"8211":15,"8212":15,"8216":5,"8217":5,"8218":5,"8220":8,"8221":8,"8222":9,"8226":9,"8230":10};
+const G2_KERNING = {
+  32: [[1,"(035689BCDEFGHKLMNOPQRUW[bhklp|"],[-1,"17JTVY\\fjsvw"]],
+  33: [[-1,"17?TVY\\ftvwy"],[-2,"j"]],
+  34: [[-1,"#)/12?ATXYZ]svwxyz}"],[-2,"J"],[-3,"j"]],
+  35: [[-1," \"#%&'()*+-/02345689<=>?@ABCDEFGHIKLMNOPQRSUWXZ[]^abcdefghklmnopqrstuvwxyz{|}~ –—‘’“”•"],[-2,"17JVY\\"],[-3,"Tj"]],
+  36: [[-1,"#$&)/1247@\\]}"]],
+  37: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  38: [[-1," \"#%&'()*+-/02345689<=>?@ABCDEFGHIKLMNOPQRSUWXZ[]^abcdefghklmnopqrsuvwxyz{|}~ –—‘’“”•"],[-2,"17JVY\\t"],[-3,"Tj"]],
+  39: [[-1,"#)/12?ATXYZ]svwxyz}"],[-2,"J"],[-3,"j"]],
+  40: [[-1," \"#%&'()*+-/012356789=>@ACGIOQSTUVWXYZ\\]^acdegmnopqruxz{}~ –—‘’“”•"],[-2,"4<?Jfstvwy"],[-3,"j"]],
+  41: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  42: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  43: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  44: [[-1,"17?TVY\\ftvwy"],[-2,"j"]],
+  45: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  46: [[-1,"17?TVY\\ftvwy"],[-2,"j"]],
+  47: [[-1," !%()*+,-.012356789:;<=>?CGIOQSTUVWXYZ\\]^_imnpru{}~ –—‚„•…"],[-2,"#&@acdefgoqstvwxyz"],[-3,"/4AJj"]],
+  48: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  49: [[1,"  "],[-1,"#/147AJTVYafstvwxyz"],[-3,"j"]],
+  50: [[-1,"\"#%&')*+-/1247<=>?@AISVXYZ\\]^acdefgoqstvwxyz{}~–—‘’“”•"],[-2,"JT"],[-3,"j"]],
+  51: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  52: [[-1," \"#%&'()*+-/02345689<=>@ABCDEFGHIJKLMNOPQRSUXZ[]^abcdeghklmnopqrstvwxyz{|}~ –—‘’“”•"],[-2,"17TVWY\\f"],[-3,"j"]],
+  53: [[-1,"#)/1247AJTVXYZ\\]afstvwxyz}"],[-3,"j"]],
+  54: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  55: [[-1," !%()*+,-.012356789:;<=>?BCDEFGHIKLMNOPQRSTUVWXYZ[\\]^_bhiklmnpru{|}~ –—‚„•…"],[-2,"#&@acdefgoqstvwxyz"],[-3,"/4AJj"]],
+  56: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  57: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  58: [[-1,"17TVY\\ftvwy"],[-2,"j"]],
+  59: [[-1,"17?TVY\\ftvwy"],[-2,"j"]],
+  60: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  61: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  62: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  63: [[-1,"!\"#%')*+,-.127;=>VXYZ\\]^_afgvwxz}~–—‘’‚“”„•…"],[-2,"/4AJTj"]],
+  64: [[-1,"#)/24?AIJSWXZ]_afgstvwxyz}"],[-2,"17TV\\"],[-3,"Yj"]],
+  65: [[-1,"\"#%&'()*+-/0235689<=>@ABCDEFGHIJKLMNOPQRSUXZ[]^abcdeghiklmnopqrsuxz{|}~–—‘’“”•"],[-3,"17TVY\\j"],[-2,"4?Wftvwy"]],
+  66: [[-1,"#)/1247AIJSVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  67: [[-1,"\"#%&'()*+-/0123456789<=>?@ABCDEFGHIJKLMNOPQRSUVWXYZ[\\]^abcdefghiklmnopqrstuvwxyz{|}~–—‘’“”•"],[-2,"T"],[-3,"j"]],
+  68: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  69: [[-1," \"#%&'()*+-/02356789:;<=>?@ABCDEFGHIKLMNOPQRSTUVWXYZ[\\]^bcdeghklmnopqrsuxz{|}~ –—‘’“”•"],[-2,"14Jaftvwy"],[-3,"j"]],
+  70: [[-2," #%&*+,-.:;<=>@^_cdefgmnoqrstuvwxyz{~ –—‚„•…"],[-1,"!\"'()012356789?BCDEFGHIKLMNOPQRSTUVWXYZ[\\]bhiklp|}‘’“”"],[-3,"/4AJa"],[-4,"j"]],
+  71: [[-1,"#)/1247?AIJVWXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  72: [[1,"  "],[-1,"#/147AJTVYafstvwxyz"],[-3,"j"]],
+  73: [[-1," #&()/012346789@ACGIJOQSTVXYZ\\]acdegoqstvwxyz} "],[-2,"f"],[-3,"j"]],
+  74: [[-1,"#)/1247AJTVXYZ\\]afstvwxyz}"],[-3,"j"]],
+  75: [[-1," \"#%&'()*+-/012356789=>@ACGIOQSTUVWXZ\\]^acdegmnopqruxz{}~ –—‘’“”•"],[-2,"4<?JYfstvwy"],[-3,"j"]],
+  76: [[-1," #&)/25>@ABDEFHIKLMNPRUXZ[]bcdeghiklmnopqrxz|} "],[-3,"\"'*+-17<=?TVY\\^fjvwy{~–—‘’“”•"],[-2,"%(034689CGJOQSWastu"]],
+  77: [[1,"  "],[-1,"#/147AJTVYafstvwxyz"],[-3,"j"]],
+  78: [[1,"  "],[-1,"#/147AJTVYafstvwxyz"],[-3,"j"]],
+  79: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  80: [[-1,"!\"%&'()*+,-.01236789:;<=>?@CGIOQSVXYZ\\]_cdefgimnopqrstuvwxyz{}~–—‘’‚“”„•…"],[-2,"#/ATa"],[-3,"4Jj"]],
+  81: [[-1,"#)/1247;AIJVXYZ\\]afstvwxyz}"],[-2,"T"],[-3,"j"]],
+  82: [[-1,"\"#%&')*+-/1247<=>?@AISVXYZ\\]^acdefgoqstvwxyz{}~–—‘’“”•"],[-2,"JT"],[-3,"j"]],
+  83: [[-1,"#&)/1247@AIJSVWXYZ\\]acdefoqstvwxyz}"],[-2,"Tj"]],
+  84: [[-1," !\"%')*+,-.57:;<=>BDEFHIKLMNPRUVWXYZ[\\]^_bhikl{|}~ –—‘’‚“”„•…"],[-3,"#/4Aajsvwxyz"],[-2,"&(0123689?@CGOQSTcdefgmnopqrtu"],[-4,"J"]],
+  85: [[-1,"#)/1247AJTVXYZ\\]afstvwxyz}"],[-3,"j"]],
+  86: [[-1," !%()*+,-.012356789:;<=>?BCDEFGHIKLMNOPQRSTUVWXYZ[\\]^_bhiklmnpru{|}~ –—‚„•…"],[-2,"#&@acdefgoqstvwxyz"],[-3,"/4AJj"]],
+  87: [[-1,"#&)127@STVXYZ\\]acdefgopqstvwxyz}"],[-2,"/4AJ"],[-3,"j"]],
+  88: [[-1," \"#%&'()*+-/012356789=>@ACGIOQSTUVWXYZ\\]^acdegmnopqruxz{}~ –—‘’“”•"],[-2,"4<?Jfstvwy"],[-3,"j"]],
+  89: [[-1," !\"%'()*+,-.02356789:;=>?BCDEFGHIKLMNOPQRSTUVWXYZ[\\]^_bhikl{|}~ –—‘’‚“”„•…"],[-4,"#j"],[-3,"&/4@AJacdeoqs"],[-2,"1<fgmnprtuvwxyz"]],
+  90: [[-1," \"#%&'()*+-/012356789=>@ACGIOQSTUVWXYZ\\]^acdegmnopqruxz{}~ –—‘’“”•"],[-2,"4<?Jfstvwy"],[-3,"j"]],
+  91: [[-1," \"#%&'()*+-/012356789=>@ACGIOQSTUVWXYZ\\]^acdegmnopqruxz{}~ –—‘’“”•"],[-2,"4<?Jfstvwy"],[-3,"j"]],
+  92: [[-1,"\"#%&'()*+-/0235689<=>@ABCDEFGHIJKLMNOPQRSUXZ[]^abcdeghiklmnopqrsuxz{|}~–—‘’“”•"],[-3,"17TVY\\j"],[-2,"4?Wftvwy"]],
+  93: [[1,"  "],[-1,"#/147AJTVYafstvwxyz"],[-3,"j"]],
+  94: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  95: [[-1,"17?TVY\\ftvwy"],[-2,"j"]],
+  97: [[-1," \"#%&'()*+-/0245689<=>@ABCDEFGHIKLMNOPQRUWXZ[]^abcdeghiklmnopqrsuxz{|}~ –—‘’“”•"],[-3,"1TY"],[-2,"37?JSV\\ftvwy"],[-4,"j"]],
+  98: [[-1,"#)/24?AIJSWXZ]_acdefgoqstvwxyz}"],[-2,"17TV\\"],[-3,"Yj"]],
+  99: [[-1,"#&()/0234689?@ABCDEFGHIJKLMNOPQRSWXZ[]abcdeghiklmnopqrstuvwxyz|}"],[-2,"17TV\\f"],[-3,"Yj"]],
+  100: [[1,"  "],[-1,"#/147AJTVYafstvwxyz"],[-3,"j"]],
+  101: [[-1,"#&)/24?@AIJSWXZ]acdefgoqstvwxyz}"],[-2,"17TV\\"],[-3,"Yj"]],
+  102: [[-1," !\"%'()*+-02356789<=>BCDEFGHIKLMNOPQRSTUVWXYZ[\\]^bhikl{|}~ –—‘’“”•"],[-2,"#&,.1:;?@_cdegmnopqrtuvwxyz‚„…"],[-3,"/4Aafs"],[-4,"Jj"]],
+  103: [[-1,"#)/24?AIJXYZ]afjstvwxyz}"],[-2,"17TV\\"]],
+  104: [[-1,"#)/24?AJSXZ]acdefoqstvwxyz}"],[-2,"17TVY\\j"]],
+  105: [[-1,"/17AJTVY\\aftvwy"],[1,"i"],[-2,"j"]],
+  106: [[-1,"/17AJTVY\\aftvwy"],[1,"i"],[-2,"j"]],
+  107: [[-1," \"#%&'()*+-/02345689<=>?@ABCDEFGHIKLMNOPQRSUWXZ[]^abcdefghklmnopqrstuvwxz{|}~ –—‘’“”•"],[-2,"17JVY\\y"],[-3,"Tj"]],
+  108: [[1,"  "],[-1,"#/147AJTVYafstvwxyz"],[-3,"j"]],
+  109: [[-1,"#)/24?AJSXZ]acdefoqstvwxyz}"],[-2,"17TV\\j"],[-3,"Y"]],
+  110: [[-1,"#)/24?AJSXZ]acdefoqstvwxyz}"],[-2,"17TVY\\j"]],
+  111: [[-1,"#)/24?AIJSWXZ]_acdefgoqstvwxyz}"],[-2,"17TV\\"],[-3,"Yj"]],
+  112: [[-1,"#)/24?AIJSWXZ]_acdefgoqstvwxyz}"],[-2,"17TV\\"],[-3,"Yj"]],
+  113: [[-1,"#/4?AIJYafjstvwxyz"],[-2,"17TV\\"]],
+  114: [[-2," ),.127;@IVXZ\\]_acdefgoqstvwy} ‚„…"],[-1,"!\"#%&'(*+-035689:<=>?BCDEFGHKLMNOPQRSUW[^bhiklmnpruxz{|~–—‘’“”•"],[-3,"/4AJTY"],[-4,"j"]],
+  115: [[-1,"\"#%&'()*+-/02345689<=>?@ABCDEFGHIJKLMNOPQRSUWXZ[]^abcdeghklmnopqrstuvwxyz{|}~–—‘’“”•"],[-3,"1TYj"],[-2,"7V\\f"]],
+  116: [[-1," \"#%&'()*+-/02345689:<=>?@ABCDEFGHIJKLMNOPQRSUWXZ[]^bcdefghiklmnopqrsuvwxyz{|}~ –—‘’“”•"],[-2,"17TVY\\at"],[-3,"j"]],
+  117: [[-1," \"#%&'()*+-/02345689<=>?@ABCDEFGHIKLMNOPQRSUWXZ[]^abcdeghiklmnopqrsuxz{|}~ –—‘’“”•"],[-2,"17JV\\ftvwy"],[-3,"TYj"]],
+  118: [[-1,"!\"%&'(*+,-.01235689:;<=>?@BCDEFGHIKLMNOPQRSUW[^_bcdefghiklmnopqrstuvwxyz{|~–—‘’‚“”„•…"],[-2,"#)/47AVXYZ\\]a}"],[-3,"JT"],[-4,"j"]],
+  119: [[-1,"!\"%&'(*+,-.01235689:;<=>?@BCDEFGHIKLMNOPQRSUW[^_bcdefghiklmnopqrstuvwxyz{|~–—‘’‚“”„•…"],[-2,"#)/47AVXYZ\\]a}"],[-3,"JT"],[-4,"j"]],
+  120: [[-1," \"#%&'()*+-/02345689<=>?@ABCDEFGHIJKLMNOPQRSUWXZ[]^abcdefghklmnopqrstuvwxyz{|}~ –—‘’“”•"],[-2,"17VY\\"],[-3,"Tj"]],
+  121: [[-1,"!\"%&'(*+,-.01235689:;<=>?@BCDEFGHIKLMNOPQRSUW[^_bcdefghiklmnopqrstuvwxyz{|~–—‘’‚“”„•…"],[-2,"#)/47AVXYZ\\]a}"],[-3,"JT"],[-4,"j"]],
+  122: [[-1," \"#%&'()*+-/02345689<=>?@ABCDEFGHIKLMNOPQRSUWXZ[]^abcdefghklmnopqrstuvwxyz{|}~ –—‘’“”•"],[-2,"17JVY\\"],[-3,"Tj"]],
+  123: [[-1," \"#%&'()*+-/012356789=>@ACGIOQSTUVWXYZ\\]^acdegmnopqruxz{}~ –—‘’“”•"],[-2,"4<?Jfstvwy"],[-3,"j"]],
+  124: [[1,"  "],[-1,"#/147AJTVYafstvwxyz"],[-3,"j"]],
+  125: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  126: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  160: [[1,"(035689BCDEFGHKLMNOPQRUW[bhklp|"],[-1,"17JTVY\\fjsvw"]],
+  8211: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  8212: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  8216: [[-1,"#)/12?ATXYZ]svwxyz}"],[-2,"J"],[-3,"j"]],
+  8217: [[-1,"#)/12?ATXYZ]svwxyz}"],[-2,"J"],[-3,"j"]],
+  8218: [[-1,"17?TVY\\ftvwy"],[-2,"j"]],
+  8220: [[-1,"#)/12?ATXYZ]svwxyz}"],[-2,"J"],[-3,"j"]],
+  8221: [[-1,"#)/12?ATXYZ]svwxyz}"],[-2,"J"],[-3,"j"]],
+  8222: [[-1,"17?TVY\\ftvwy"],[-2,"j"]],
+  8226: [[-1,"#)/127?ATVXYZ\\]svwxyz}"],[-2,"J"],[-3,"j"]],
+  8230: [[-1,"17?TVY\\ftvwy"],[-2,"j"]],
+};
+function g2GlyphWidth(value, index, end) {
+  const cp = value.codePointAt(index), step = cp > 0xffff ? 2 : 1;
+  const next = index + step < end ? value.codePointAt(index + step) : 0;
+  if (!Object.hasOwn(G2_GLYPH_WIDTH, cp) || !Object.hasOwn(G2_GLYPH_WIDTH, next)) return null;
+  let width = G2_GLYPH_WIDTH[cp];
+  for (const [delta, following] of G2_KERNING[cp] || []) {
+    if (following.includes(String.fromCodePoint(next))) { width += delta; break; }
+  }
+  return width;
+}
+function g2LineEnd(value, start, end = value.length, scanLimit = end) {
+  let position = start, remaining = 538;
+  while (position < end && remaining > 0) {
+    const first = position; let cursor = first, total = 0, wordWidth = 0;
+    while (cursor < end) {
+      // Zero-width runs must not rescan the whole remaining message per block.
+      // A bounded lookahead proves that the next word wraps; longer runs fall back.
+      if (cursor > scanLimit) return null;
+      const cp = value.codePointAt(cursor), step = cp > 0xffff ? 2 : 1;
+      const width = g2GlyphWidth(value, cursor, end);
+      if (width === null) return null;
+      total += width;
+      if (total > remaining) {
+        if (first !== start) { cursor = first; wordWidth = 0; }
+        break;
+      }
+      if (' ,.;:-_)]}\r\n'.includes(String.fromCodePoint(cp))) {
+        if (cursor === first || (cp === 13 && cursor + 1 < end && value[cursor + 1] === '\n')) { cursor += step; wordWidth = total; }
+        break;
+      }
+      wordWidth = total; cursor += step;
+    }
+    remaining -= wordWidth;
+    if (cursor === first) break;
+    position = cursor;
+    if (value[start] === '\n' || value[start] === '\r') break;
+    if (position < end && (value[position] === '\n' || value[position] === '\r')) { position++; break; }
+  }
+  return position > start ? position : start + (value.codePointAt(start) > 0xffff ? 2 : 1);
+}
+function g2LineCut(value, start, limit) {
+  let line = start, cut = 0;
+  while (line < limit) {
+    const end = g2LineEnd(value, line, value.length, limit + 512);
+    if (end === null || end > limit) break;
+    // At a block end the final glyph has no next-glyph kerning. Ensure the
+    // completed line still fits when the native label ends at this boundary.
+    if (g2LineEnd(value, line, end) === end) cut = end;
+    line = end;
+  }
+  return cut ? cut - start : 0;
+}
+
 function byteChunks(value, limit = 512) {
   const result = []; let part = '', n = 0;
   for (const cp of value) {
@@ -47,11 +213,13 @@ function chunks(value, compact = false) {
     }
     if (end < value.length) {
       // Native items are separate display blocks. Prefer complete paragraphs,
-      // then lines and words; keep every original separator in the old block.
+      // then lines; align long paragraphs with completed native display lines.
+      // Keep every original separator in the old block.
       if (value[end - 1] === '\r' && value[end] === '\n') end--;
       const prefix = value.slice(start, end); let cut = 0;
       for (const match of prefix.matchAll(/\n[\t \r]*\n(?:[\t \r]*\n)*/gu)) cut = match.index + match[0].length;
       if (!cut) cut = Math.max(prefix.lastIndexOf('\n'), prefix.lastIndexOf('\r')) + 1;
+      if (!cut) cut = g2LineCut(value, start, end);
       if (!cut) for (const match of prefix.matchAll(/\s/gu)) cut = match.index + match[0].length;
       if (cut) end = start + cut;
     }
