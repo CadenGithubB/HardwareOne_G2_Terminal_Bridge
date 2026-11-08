@@ -187,7 +187,8 @@ class RelaySetupTests(unittest.TestCase):
         for index, changes in enumerate(({"bind": "0.0.0.0"}, {"bind": "localhost"},
                                          {"bind": "224.0.0.1"}, {"bind": "::1"},
                                          {"port": 0}, {"upstream-port": 65536},
-                                         {"device-id": "../../different-agent"})):
+                                         {"device-id": "../../different-agent"},
+                                         {"name": "192.0.2.10"}, {"address": "0.0.0.0"})):
             with self.subTest(changes=changes):
                 destination = self.root / ("invalid-parameters-" + str(index))
                 result = self.execute(destination, **changes)

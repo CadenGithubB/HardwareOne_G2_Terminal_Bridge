@@ -56,9 +56,12 @@ This is the gateway token, not the XIAO account password. The setup command:
 - Validates the files locally, without changing OpenClaw or starting any service.
 
 The server certificate lasts 365 days. Keep the CA private key on the host for
-certificate renewal. A changed host IP needs a matching certificate and device
-URL; there is no fallback to listening on all interfaces. The generated plist
-uses the Python executable that ran setup; keep that interpreter installed.
+[certificate renewal](#renew-the-certificate). A changed host IP needs a matching
+`bind_host`, certificate and device URL; there is no fallback to listening on all
+interfaces. To use the relay both at home and away without reconfiguring, give
+it a [stable name](#use-one-address-at-home-and-away); `--name relay.example.net`
+adds one at setup. The generated plist uses the Python executable that ran setup;
+keep that interpreter installed.
 
 Preflight can be repeated without starting a listener:
 
@@ -133,6 +136,53 @@ Only the public CA certificate needs to be shared for device setup. Keep both
 token files, the CA private key, and the server private key on the appropriate
 host/device credential paths, out of Git and shared transcripts.
 
+## Use one address at home and away
+
+The device trusts exactly the host in `llmhttpurl`. With a raw IP address,
+moving between networks means a different URL and a new certificate each time.
+Use one DNS name instead, so the device setting never changes. This assumes the
+relay host stays on the home network; `relay.example.net` and `192.0.2.10` are
+placeholders.
+
+1. Keep the host's LAN address fixed with a DHCP reservation on the router.
+   `bind_host` and the port forward depend on it.
+2. Choose a name that resolves to the home network's public address, for
+   example through the router's Dynamic DNS feature. A phone hotspot uses
+   public DNS, so the name must resolve publicly.
+3. Forward one TCP port on the router to `192.0.2.10:18790`. Forward only the
+   relay port; the Gateway and Terminal host stay on loopback.
+4. Make the same name work at home: use the router's NAT loopback (hairpin)
+   for that forward, or add a local DNS record mapping the name to `192.0.2.10`.
+   The local record also keeps home use working during an internet outage.
+5. Add the name to the certificate from the existing CA, then restart the relay
+   (see [renewal](#renew-the-certificate)).
+6. On the device, set `llmhttpurl` to `https://relay.example.net:18790/v1` once.
+   `llmhttpca` and `llmhttptoken` stay as they are. Keep both the home network
+   and the hotspot in the device's saved Wi-Fi networks.
+
+The firmware resolves names through ordinary DNS. It does not resolve mDNS
+`.local` names. A forwarded port is reachable from the internet: every request
+still needs TLS and the device token, but anyone holding that token can prompt
+OpenClaw from anywhere. Keep it private.
+
+## Renew the certificate
+
+From the copied kit's `relay` directory, check first, then reissue:
+
+```sh
+python3 renew_cert.py --name relay.example.net --check
+python3 renew_cert.py --name relay.example.net
+```
+
+This signs a new server certificate with the existing CA, saves private backups
+of the previous certificate and key, and starts nothing. The CA, device token
+and configuration are unchanged, so the device needs no new `llmhttpca` or
+`llmhttptoken`. Names and addresses already on the certificate are kept; add
+`--address` for an extra fixed IPv4 address, or `--replace` to keep only the
+bind address and the names given. Run it without arguments to renew before the
+365-day expiry. Restart the relay to load the new certificate. Do not rerun
+`setup_relay.py` for this: it creates a new CA and device token.
+
 ## Optional macOS background service
 
 After foreground testing succeeds, stop it with Ctrl-C. Install the generated
@@ -191,6 +241,7 @@ Run local tests from the repository root:
 ```sh
 python3 -B tests/test_relay.py
 python3 -B tests/test_relay_setup.py
+python3 -B tests/test_relay_renew.py
 ```
 
 They use temporary loopback servers, temporary certificates, and fake gateway

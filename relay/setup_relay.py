@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import secrets
 import shutil
 import subprocess
@@ -31,6 +32,53 @@ def openssl(program, *arguments):
         raise ValueError("Certificate generation failed; no installation created")
 
 
+def certificate_names(bind, names=(), addresses=()):
+    """Return the server certificate's IPv4 addresses (bind first) and DNS names."""
+    ips = []
+    for value in (bind, *addresses):
+        address = ipaddress.IPv4Address(value)
+        if address.is_unspecified or address.is_multicast or address.is_reserved:
+            raise ValueError("Certificate addresses must be specific IPv4 addresses")
+        if str(address) not in ips:
+            ips.append(str(address))
+    hostnames = []
+    for value in names:
+        name = value.lower()
+        labels = name.split(".")
+        # A numeric final label would let an IP address pass as a DNS name.
+        if (len(name) > 253 or labels[-1].isdigit() or not all(
+                re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels)):
+            raise ValueError("Certificate names must be DNS hostnames such as relay.example.net")
+        if name not in hostnames:
+            hostnames.append(name)
+    if len(ips) + len(hostnames) > 16:
+        raise ValueError("At most 16 certificate names and addresses are supported")
+    return ips, hostnames
+
+
+def issue_leaf(program, staging, ca_cert, ca_key, addresses, names):
+    """Write relay-key.pem and relay-cert.pem into staging, signed by the given CA."""
+    alternatives = ["IP:" + address for address in addresses] + ["DNS:" + name for name in names]
+    private_write(staging / "leaf.cnf", """basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+subjectAltName = %s
+""" % ", ".join(alternatives))
+    openssl(program, "req", "-new", "-newkey", "rsa:2048", "-nodes", "-sha256",
+            "-subj", "/CN=Hardware One Relay", "-keyout", str(staging / "relay-key.pem"),
+            "-out", str(staging / "relay.csr"))
+    # A random serial keeps reissued certificates from the same CA distinct.
+    openssl(program, "x509", "-req", "-in", str(staging / "relay.csr"),
+            "-CA", str(ca_cert), "-CAkey", str(ca_key), "-set_serial", "0x" + secrets.token_hex(16),
+            "-days", "365", "-sha256", "-extfile", str(staging / "leaf.cnf"),
+            "-out", str(staging / "relay-cert.pem"))
+    os.chmod(staging / "relay-key.pem", 0o600)
+    for name in ("leaf.cnf", "relay.csr"):
+        (staging / name).unlink(missing_ok=True)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bind", required=True, help="Host's reachable IPv4 address")
@@ -41,6 +89,10 @@ def main(argv=None):
                         default=Path.home() / ".openclaw" / "hardwareone-relay")
     parser.add_argument("--gateway-token-file", type=Path,
                         help="Existing owner-only token file; otherwise prompt with echo disabled")
+    parser.add_argument("--name", action="append", default=[],
+                        help="Stable DNS name the device may use instead of the IP (repeatable)")
+    parser.add_argument("--address", action="append", default=[],
+                        help="Additional IPv4 address for the certificate, such as a fixed public address (repeatable)")
     args = parser.parse_args(argv)
     destination = args.output.expanduser().absolute()
     if destination.exists() or destination.is_symlink():
@@ -55,6 +107,10 @@ def main(argv=None):
             raise ValueError()
     except ValueError:
         parser.error("--bind must be a specific interface IPv4 address")
+    try:
+        addresses, names = certificate_names(address, args.name, args.address)
+    except ValueError as error:
+        parser.error(str(error))
     program = shutil.which("openssl")
     if not program:
         parser.error("openssl is required to create the local CA and server certificate")
@@ -85,25 +141,11 @@ basicConstraints = critical, CA:true, pathlen:0
 keyUsage = critical, keyCertSign, cRLSign
 subjectKeyIdentifier = hash
 """)
-            private_write(staging / "leaf.cnf", """basicConstraints = critical, CA:false
-keyUsage = critical, digitalSignature, keyEncipherment
-extendedKeyUsage = serverAuth
-subjectKeyIdentifier = hash
-authorityKeyIdentifier = keyid,issuer
-subjectAltName = IP:%s
-""" % address)
             openssl(program, "req", "-new", "-x509", "-newkey", "rsa:2048", "-nodes",
                     "-sha256", "-days", "3650", "-config", str(staging / "ca.cnf"),
                     "-keyout", str(staging / "ca-key.pem"), "-out", str(staging / "ca-cert.pem"))
-            openssl(program, "req", "-new", "-newkey", "rsa:2048", "-nodes", "-sha256",
-                    "-subj", "/CN=Hardware One Relay", "-keyout", str(staging / "relay-key.pem"),
-                    "-out", str(staging / "relay.csr"))
-            openssl(program, "x509", "-req", "-in", str(staging / "relay.csr"),
-                    "-CA", str(staging / "ca-cert.pem"), "-CAkey", str(staging / "ca-key.pem"),
-                    "-CAcreateserial", "-days", "365", "-sha256", "-extfile", str(staging / "leaf.cnf"),
-                    "-out", str(staging / "relay-cert.pem"))
-            for name in ("ca-key.pem", "relay-key.pem"):
-                os.chmod(staging / name, 0o600)
+            os.chmod(staging / "ca-key.pem", 0o600)
+            issue_leaf(program, staging, staging / "ca-cert.pem", staging / "ca-key.pem", addresses, names)
             config = dict(bind_host=str(address), bind_port=args.port,
                           device_identity=args.device_id, upstream_port=args.upstream_port,
                           tls_cert_file=str(staging / "relay-cert.pem"),
@@ -127,8 +169,7 @@ subjectAltName = IP:%s
                           EnvironmentVariables={"PYTHONUNBUFFERED": "1"})
             with open(staging / "launchagent.plist", "xb") as output:
                 plistlib.dump(launch, output)
-            for name in ("ca.cnf", "leaf.cnf", "relay.csr", "ca-cert.srl"):
-                (staging / name).unlink(missing_ok=True)
+            (staging / "ca.cnf").unlink(missing_ok=True)
             # Refuse to replace a directory that appeared while preparing files.
             # mkdir reserves the destination; it is removed only if our rename fails.
             destination.mkdir(mode=0o700)
@@ -141,6 +182,8 @@ subjectAltName = IP:%s
         os.umask(previous_mask)
     print("Prepared relay files in " + str(destination))
     print("Relay base URL: https://%s:%d/v1" % (address, args.port))
+    for name in names:
+        print("Also valid when it resolves to this relay: https://%s:%d/v1" % (name, args.port))
     print("Public CA certificate: " + str(destination / "ca-cert.pem"))
     print("Device token is in device-token.txt; keep both token files and private keys private.")
     print("Server certificate expires in 365 days; preserve ca-key.pem privately for renewal.")
