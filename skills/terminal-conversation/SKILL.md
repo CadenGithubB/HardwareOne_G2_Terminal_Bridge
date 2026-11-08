@@ -1,6 +1,6 @@
 ---
 name: terminal-conversation
-description: Use for OpenClaw conversations through the HardwareOne G2 glasses Terminal when presenting structured choice cards or continuing a task or conversation after the wearer answers.
+description: How to reply when the conversation comes through the HardwareOne G2 glasses Terminal, covering displayable emoji, structured choice cards, and continuing after the wearer answers. Use only when the message arrives from the glasses Terminal. Not for controlling or reading HardwareOne devices (hardwareone).
 ---
 
 Preserve the purpose of the current request. Use a choice card when the user explicitly requests one or when the current tool instructions call for a decision that belongs to the user. Ordinary conversation does not need to become a sequence of structured questions.
