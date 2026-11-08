@@ -1,7 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDeviceApi } from '../device-api.mjs';
+import { createDeviceApi, g2DisplayText } from '../device-api.mjs';
 const SESSION = 'hwo_' + 'a'.repeat(64), OTHER = 'hwo_' + 'b'.repeat(64);
+
+test('G2 emoji presentation preserves allowed glyphs and replaces unsupported sequences', () => {
+  assert.equal(g2DisplayText('✨ 👍 👀 👌 👏 💪 💯 🔥 😊 🙂 🤔 🎉'), '✨ 👍 👀 👌 👏 💪 💯 🔥 😊 🙂 🤔 🎉');
+  assert.equal(g2DisplayText('✅ ✅️ 👋 👋️'), '[check] [check] [wave] [wave]');
+  assert.equal(g2DisplayText('⚠️ Warning 🛠️ Tools 🚀 ✓ ✔ ❌'), '[warning] Warning [tools] Tools [rocket] [check] [check] [cross mark]');
+  assert.equal(g2DisplayText('❤️ ☺️ 👍️'), '❤ ☺ 👍');
+  assert.equal(g2DisplayText('© ™ ↔️ ▶️ 中文 café e\u0301 123 # *'), '© ™ ↔ ▶ 中文 café e\u0301 123 # *');
+  for (const value of ['👍🏽', '👩‍💻', '🇺🇸', '1️⃣', '🫠']) {
+    const formatted = g2DisplayText(value);
+    assert.match(formatted, /^\[emoji (U\+[0-9A-F]+ ?)+\]$/u);
+    assert.equal(formatted, `[emoji ${Array.from(value, c => `U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`).join(' ')}]`);
+    assert.equal(g2DisplayText(formatted), formatted);
+  }
+});
 function fixture(history = []) {
   let instance = '11111111-1111-1111-1111-111111111111', cursor = 0, number = 1;
   const events = [], calls = [], snapshot = { sessionId: SESSION, runId: null, state: 'idle', uncertain: false, cursor: 0 };
@@ -89,6 +103,31 @@ test('prompt ID is idempotent and selected view plus instance fence every mutati
 test('new reserves a conversation without a model call', async () => {
   const f = fixture(); const result = await f.call('new');
   assert.equal(result.ok, true); assert.equal(result.sessionId, OTHER); assert.deepEqual(f.calls, [['new']]);
+});
+
+test('failed runs show a safe explanation with or without partial reply text', async () => {
+  for (const reply of ['', 'Partial reply']) {
+    const f = fixture(), view = await f.open();
+    if (reply) f.emit({ type: 'text_delta', runId: 'failed', text: reply });
+    f.emit({ type: 'result', runId: 'failed', success: false, outcome: 'error', text: reply,
+      errorMessage: 'PRIVATE_UPSTREAM_ERROR' });
+    f.emit({ type: 'status', runId: 'failed', state: 'idle' });
+    const { events } = await f.drain(view);
+    assert.ok(events.some(e => e.type === 'content' && e.text.includes('could not finish this reply')));
+    if (reply) assert.ok(events.some(e => e.type === 'content' && e.text === reply));
+    assert.ok(events.some(e => e.type === 'state' && e.state === 'idle'));
+    assert.ok(!JSON.stringify(events).includes('PRIVATE_UPSTREAM_ERROR'));
+    assert.deepEqual(f.calls, []);
+  }
+});
+
+test('successful and interrupted runs do not display a failure explanation', async () => {
+  for (const outcome of ['final', 'aborted']) {
+    const f = fixture(), view = await f.open();
+    f.emit({ type: 'result', runId: 'finished', success: outcome === 'final', outcome, text: 'Reply' });
+    const { events } = await f.drain(view);
+    assert.ok(!events.some(e => e.type === 'content' && e.text.includes('could not finish')));
+  }
 });
 
 test('approval renders complete safe facts, accepts only exact offers, and cannot migrate to another view', async () => {
@@ -278,7 +317,7 @@ test('only exact wrapper envelope is suppressed when start arguments are absent'
   assert((await f.drain(view)).events.some(e=>e.type==='content' && e.kind===2 && e.text===envelope));
 });
 
-test('accepted question answers render exact readable choices and voice text in bounded UTF-8 items', async () => {
+test('accepted question answers render readable choices and voice text in bounded UTF-8 items', async () => {
   const f = fixture(), view = await f.open();
   const answers = [
     { question: 'Pick colors', values: ['Red', 'Blue'] },
@@ -287,7 +326,8 @@ test('accepted question answers render exact readable choices and voice text in 
   const receipt = { type: 'question_answer', requestId: 'accepted-question', status: 'answered', answers };
   f.emit(receipt);
   const first = (await f.drain(view)).events.filter(e => e.type === 'content' && e.kind === 5);
-  assert.equal(first.map(e => e.text).join(''), answers.map(a => `${a.question}\nYou: ${a.values.join(', ')}`).join(''));
+  assert.equal(first.map(e => e.text).join(''), answers.map(a => `${a.question}\nYou: ${a.values.join(', ')}`).join('').replaceAll('🌲', '[emoji U+1F332]'));
+  assert.equal(answers[1].values[0], '🌲'.repeat(120));
   assert.ok(first.length > answers.length);
   assert.ok(first.every(e => Buffer.byteLength(e.text) <= 512 && !e.text.includes('\ufffd')));
   // An event/RPC replay uses the same content identities, not another answer.
@@ -563,4 +603,68 @@ test('a maximum-size zero-width run keeps the bounded compact projection', async
   assert.equal(parts.map(e => e.text).join(''), raw);
   assert.equal(parts.length, 256);
   assert(parts.every(e => Buffer.byteLength(e.text) === 512));
+});
+
+test('emoji replacements apply before content and title byte limits without changing source text', async () => {
+  const raw = '✅ ⚠️ 🚀 👩‍💻 '.repeat(250), history = [{ role: 'assistant', text: raw }];
+  const f = fixture(history);
+  f.provider.listSessions = async () => [{ id: SESSION, title: '🚀'.repeat(30), status: 'idle' }];
+  const page = await f.call('list', { offset: 0, limit: 7 });
+  assert.ok(page.sessions[0].title.startsWith('[rocket]'));
+  assert.ok(Buffer.byteLength(page.sessions[0].title) <= 64);
+  const events = (await f.drain(await f.open())).events.filter(e => e.type === 'content');
+  assert.equal(events.map(e => e.text).join(''), g2DisplayText(raw));
+  assert.ok(events.every(e => Buffer.byteLength(e.text) <= 512));
+  assert.equal(history[0].text, raw);
+});
+
+test('streamed emoji sequences are recomputed from the original accumulated text', async () => {
+  const f = fixture(), view = await f.open(); let { after } = await f.drain(view);
+  const items = new Map();
+  for (const text of ['👍', '🏽', ' 👩', '\u200d', '💻', ' ⚠', '\ufe0f']) {
+    f.emit({ type: 'text_delta', runId: 'run', text });
+    const r = await f.call('poll', { ...view, after }); after = r.cursor;
+    for (const e of r.events) if (e.type === 'content') items.set(e.itemId, e.text);
+  }
+  assert.equal([...items.values()].join(''), g2DisplayText('👍🏽 👩‍💻 ⚠️'));
+});
+
+test('question display uses readable emoji while submitted choices and prompts stay exact', async () => {
+  const f = fixture(), view = await f.open();
+  const questions = [{ questionId: 'choice', header: '📌', question: 'Choose 🛠️',
+    options: [{ label: '🚀 Launch', description: '⚠️ Check first' }, { label: '👍 Keep' }] }];
+  f.emit({ type: 'user_question', requestId: 'gateway-q', expiresAtMs: Date.now() + 60000, questions });
+  const q = (await f.drain(view)).events.find(e => e.type === 'query');
+  assert.equal(q.question, '[pin]\nChoose [tools]\n[rocket] Launch: [warning] Check first');
+  assert.equal(q.options[0].label, '[rocket] Launch');
+  await f.call('question', { ...view, pendingId: q.pendingId, questionId: q.questionId, optionIds: ['o0'] });
+  assert.deepEqual(f.calls[0], ['question', SESSION, { choice: ['🚀 Launch'] }, 'gateway-q']);
+  assert.equal(questions[0].options[0].label, '🚀 Launch');
+  await f.call('prompt', { ...view, text: 'Explain 🛠️' });
+  assert.equal(f.calls[1][2], 'Explain 🛠️');
+});
+
+test('emoji expansion and ambiguous choices require the host instead of an incomplete card', async () => {
+  for (const options of [[{ label: '⚠' }, { label: '[warning]' }], [{ label: '🫠'.repeat(30) }]]) {
+    const f = fixture(), view = await f.open();
+    f.emit({ type: 'user_question', requestId: 'gateway-q', expiresAtMs: Date.now() + 60000,
+      questions: [{ questionId: 'choice', question: 'Choose', options }] });
+    const { events } = await f.drain(view);
+    assert.ok(events.some(e => e.type === 'host_required'));
+    assert.ok(!events.some(e => e.type === 'query'));
+  }
+  const f = fixture([{ role: 'assistant', text: '🫠'.repeat(20000) }]);
+  const { events } = await f.drain(await f.open());
+  assert.ok(events.some(e => e.type === 'host_required'));
+  assert.ok(!events.some(e => e.type === 'content'));
+});
+
+test('approval facts requiring emoji substitution are routed to the host intact', async () => {
+  const f = fixture(), view = await f.open();
+  f.emit({ type: 'permission_request', requestId: 'gateway-a', expiresAtMs: Date.now() + 60000,
+    presentation: { kind: 'exec', commandText: 'rm -- 🚀.txt', allowedDecisions: ['allow-once', 'deny'] } });
+  const { events } = await f.drain(view);
+  assert.ok(events.some(e => e.type === 'host_required'));
+  assert.ok(!events.some(e => e.type === 'query'));
+  assert.deepEqual(f.calls, []);
 });

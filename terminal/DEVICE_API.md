@@ -74,8 +74,12 @@ Each event has monotonic `id`. The following forms are defined:
   split at paragraph breaks where possible, then explicit line breaks. Long
   paragraphs use complete native visual lines where the glyphs are measured;
   other text falls back to whitespace boundaries.
-  Words longer than one item split between complete code points. All original
-  text and whitespace are preserved. Native items are separate display blocks;
+  Words longer than one item split between complete code points. Before splitting,
+  the host applies the [G2 emoji presentation policy](../docs/g2-emoji-support.md):
+  listed emoji survive, unsupported emoji become readable ASCII labels, and
+  variation selectors on known glyphs are removed. Other text and whitespace
+  are preserved. OpenClaw's original transcript and submitted values stay exact.
+  Native items are separate display blocks;
   paragraphs longer than 512 bytes still span multiple blocks. Streaming
   updates reuse item IDs by position and can move a partial word into the next
   item. A replacement that shortens a previous answer emits empty updates for

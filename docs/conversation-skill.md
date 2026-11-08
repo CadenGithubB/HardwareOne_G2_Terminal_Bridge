@@ -1,9 +1,9 @@
 # Install the Terminal conversation skill
 
 This skill belongs to the OpenClaw agent, not the relay or device firmware.
-It teaches the agent to inspect the question tool's full schema and to use an
-answer to continue the requested task or conversation. It cannot guarantee a
-model will never make an invalid call.
+It teaches the agent to choose emoji from the conservative Terminal palette,
+inspect the question tool's full schema, and use an answer to continue the
+requested task or conversation. It cannot guarantee model compliance.
 
 For the supported OpenClaw version, copy the complete
 `skills/terminal-conversation/` folder into the relevant agent workspace's
@@ -13,7 +13,7 @@ and merge deliberately instead of overwriting it.
 
 Add this routing sentence to that workspace's existing agent instructions:
 
-> For HardwareOne G2 Terminal choice cards and conversation following an answer,
+> For HardwareOne G2 Terminal replies, emoji, choice cards and conversation following an answer,
 > read `skills/terminal-conversation/SKILL.md` before acting.
 
 Keep this general tool-use reminder in the regular agent guidance:
@@ -33,6 +33,8 @@ Explicitly referencing `$terminal-conversation` is useful for a first check.
 
 Suggested behavior checks after installation:
 
+- A glasses-facing reply uses the supported emoji palette or plain words;
+  literal code and paths keep their original contents. See [emoji support](g2-emoji-support.md).
 - A choice-card test uses a valid schema on the first attempt; a short final
   confirmation is sufficient when demonstrating the card was the whole request.
 - During an ongoing conversation, a selection leads to a meaningful response or

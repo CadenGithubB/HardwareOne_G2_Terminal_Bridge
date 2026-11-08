@@ -18,6 +18,39 @@ const fields = {
 };
 const ERROR_CATEGORIES = new Set(['invalid_request','capacity','host_required','reopen_required','stale_request','request_conflict','command_not_supported']);
 const GATEWAY_CODES = new Set(['INVALID_REQUEST','UNAVAILABLE','NOT_LINKED','NOT_PAIRED','FORBIDDEN','UNAUTHORIZED']);
+// Public evenemoji inventory from @evenrealities/pretext 0.1.4 (100 glyphs,
+// excluding its two spaces). See docs/g2-emoji-support.md for provenance and
+// the distinction between published font coverage and on-device verification.
+// Exclude U+2705 and U+1F44B: published metrics do not establish native support.
+const G2_EMOJI = new Set(Array.from('☺♥✨❤🌞🌸🌹🎁🎂🎈🎉🎊🎶👀👇👈👉👌👍👏👑💀💋💐💓💔💕💖💗💙💚💛💜💞💥💩💪💯💰🔥🖤😀😁😂😃😄😅😆😇😈😉😊😋😌😍😎😏😐😑😒😔😘😚😜😞😡😢😩😬😭😱😳😴🙁🙂🙃🙄🙈🙋🙌🙏🤍🤎🤔🤗🤞🤣🤤🤦🤩🤪🤭🤷🥰🥳🥴🥵🥺'));
+// Pictographs also present in the package's ordinary text-font fallback chain.
+const G2_TEXT_SYMBOLS = new Set(Array.from('©®™↔↕↖↗↘↙▶◀☎♀♂♠♣♥♨'));
+const EMOJI_CANDIDATE = /[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\u20e3\ufe0e\ufe0f✓✔✗]/u;
+const G2_EMOJI_WORDS = new Map(Object.entries({
+  '🚀': 'rocket', '🛠': 'tools', '🔧': 'wrench', '📌': 'pin', '📅': 'calendar',
+  '🔍': 'search', '💡': 'idea', '🤖': 'robot', '⚠': 'warning', '❌': 'cross mark',
+  '❗': 'exclamation', '❓': 'question', '📋': 'clipboard', '📝': 'note',
+  '📁': 'folder', '📂': 'open folder', '📄': 'document', '🔒': 'locked',
+  '🔓': 'unlocked', '🔗': 'link', '🔔': 'bell', '⏳': 'hourglass',
+  '⌛': 'hourglass', '⏱': 'stopwatch', '⚙': 'gear', '📊': 'chart',
+  '📍': 'location', '🔴': 'red circle', '🟢': 'green circle', '🟡': 'yellow circle',
+  '✓': 'check', '✔': 'check', '✗': 'cross mark', '✅': 'check', '👋': 'wave',
+}));
+const G2_GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
+export function g2DisplayText(value) {
+  if (!EMOJI_CANDIDATE.test(value)) return value;
+  let result = '';
+  for (const { segment } of G2_GRAPHEMES.segment(value)) {
+    if (!EMOJI_CANDIDATE.test(segment)) { result += segment; continue; }
+    const base = segment.replace(/[\ufe0e\ufe0f]/gu, '');
+    if (G2_EMOJI.has(base) || G2_TEXT_SYMBOLS.has(base)) result += base;
+    else if (G2_EMOJI_WORDS.has(base)) result += `[${G2_EMOJI_WORDS.get(base)}]`;
+    // Preserve the identity of unknown sequences, including skin tones, flags,
+    // keycaps and ZWJ combinations; do not silently turn them into another emoji.
+    else result += `[emoji ${Array.from(segment, c => `U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`).join(' ')}]`;
+  }
+  return result;
+}
 function reportFailure(op, error) {
   // Metadata only: never log an exception message, body, identity or credential.
   const operation = Object.hasOwn(fields, op) ? op : 'invalid';
@@ -230,7 +263,7 @@ function chunks(value, compact = false) {
   }
   return result;
 }
-function title(value) { return byteChunks(String(value || 'OpenClaw conversation'), 64)[0] || 'OpenClaw'; }
+function title(value) { return byteChunks(g2DisplayText(String(value || 'OpenClaw conversation')), 64)[0] || 'OpenClaw'; }
 const QUESTION_TOOLS = new Set(['ask_user', 'openclaw:core:ask_user']);
 function isQuestionTool(event, name) {
   if (QUESTION_TOOLS.has(name)) return true;
@@ -287,6 +320,10 @@ export function createDeviceApi(provider) {
     if (!text(value, MAX_CONTENT, true)) {
       event(v, { type: 'host_required', text: 'This output exceeds the device view limit. Open the OpenClaw dashboard.' }); return;
     }
+    value = g2DisplayText(value);
+    if (bytes(value) > MAX_CONTENT) {
+      event(v, { type: 'host_required', text: 'This output exceeds the device view limit. Open the OpenClaw dashboard.' }); return;
+    }
     if (!v.items.has(key) && v.items.size >= MAX_ITEMS) fail('reopen_required', 'This view reached its item limit; reopen recent history');
     const parts = chunks(value, v.compact), old = v.items.get(key) || [];
     for (let i = 0; i < Math.max(old.length, parts.length); ++i) {
@@ -308,7 +345,7 @@ export function createDeviceApi(provider) {
       question: p.question, options: p.options, multiSelect: false, allowText: false, expiresAtMs: p.expiresAtMs };
     const q = p.questions[p.index];
     return { type: 'query', pendingId: p.id, queryType: p.kind, questionId: `q${p.index}`, question: q.displayQuestion,
-      options: q.options.map((x, i) => ({ id: `o${i}`, label: x.label })), multiSelect: Boolean(q.multiSelect),
+      options: q.options.map((x, i) => ({ id: `o${i}`, label: g2DisplayText(x.label) })), multiSelect: Boolean(q.multiSelect),
       allowText: Boolean(q.isOther), expiresAtMs: p.expiresAtMs };
   }
   function offer(v, raw, kind) {
@@ -326,7 +363,7 @@ export function createDeviceApi(provider) {
         p.question = Object.entries(a).filter(([k]) => k !== 'allowedDecisions').map(([k, x]) =>
           `${k}: ${typeof x === 'string' ? x : JSON.stringify(x)}`).join('\n');
         p.options = a.allowedDecisions.map(x => ({ id: x, label: x }));
-        representable = text(p.question, 1024) && p.options.length >= 1 && p.options.length <= 3 &&
+        representable = text(p.question, 1024) && g2DisplayText(p.question) === p.question && p.options.length >= 1 && p.options.length <= 3 &&
           p.options.every(x => ['allow-once', 'allow-always', 'deny'].includes(x.id)) && p.options.some(x => x.id === 'deny');
       }
     } else {
@@ -336,9 +373,11 @@ export function createDeviceApi(provider) {
         Array.isArray(q.options) && q.options.length <= 4 && (q.options.length || q.isOther === true) &&
         q.options.every(o => text(o.label, 128) && (o.description === undefined || text(o.description, 1024, true))));
       if (representable) {
-        p.questions = p.questions.map(q => ({ ...q, displayQuestion: [q.header, q.question,
-          ...q.options.filter(o => o.description).map(o => `${o.label}: ${o.description}`)].filter(Boolean).join('\n') }));
+        p.questions = p.questions.map(q => ({ ...q, displayQuestion: g2DisplayText([q.header, q.question,
+          ...q.options.filter(o => o.description).map(o => `${o.label}: ${o.description}`)].filter(Boolean).join('\n')) }));
         representable = p.questions.every((q, index) => text(q.displayQuestion, 1024) &&
+          q.options.every(o => text(g2DisplayText(o.label), 128)) &&
+          new Set(q.options.map(o => g2DisplayText(o.label))).size === q.options.length &&
           bytes(JSON.stringify({ id: 0xffffffff, ...queryEvent(v, { ...p, index }), expiresInMs: 0xffffffff })) <= 3400);
       }
     }
@@ -359,7 +398,14 @@ export function createDeviceApi(provider) {
         content(v, `assistant:${run}`, 2, next); break;
       }
       case 'text_replace': if (text(e.text, MAX_CONTENT, true)) v.live.set(run, e.text); content(v, `assistant:${run}`, 2, e.text); break;
-      case 'result': content(v, `assistant:${run}`, 2, typeof e.text === 'string' ? e.text : v.live.get(run) || ''); v.live.delete(run); break;
+      case 'result':
+        content(v, `assistant:${run}`, 2, typeof e.text === 'string' ? e.text : v.live.get(run) || '');
+        v.live.delete(run);
+        // A failed run can have no text, or only an incomplete reply. Keep its
+        // outcome visible without exposing raw upstream error details.
+        if (e.outcome === 'error') content(v, `outcome:${run}`, 3,
+          'OpenClaw could not finish this reply. Check the OpenClaw dashboard for details.');
+        break;
       case 'tool_start': case 'tool_end': case 'tool_update': {
         const name = e.name || e.toolName || 'Tool';
         // Direct and deferred ask_user calls have their own choice cards. Their
@@ -443,7 +489,7 @@ export function createDeviceApi(provider) {
       const receipts = [];
       let eventSpace = MAX_EVENTS - v.events.length - 1, itemSpace = MAX_ITEMS - v.items.size;
       for (const answer of (initial.recentAnswerEvents || []).slice(-8).reverse()) {
-        const items = answerItems(answer), cost = items.reduce((n, item) => n + chunks(item.text, compact).length, 0);
+        const items = answerItems(answer), cost = items.reduce((n, item) => n + chunks(g2DisplayText(item.text), compact).length, 0);
         if (items.length && cost <= eventSpace && items.length <= itemSpace) {
           receipts.unshift(items); eventSpace -= cost; itemSpace -= items.length;
         }

@@ -5,6 +5,8 @@ description: Use for OpenClaw conversations through the HardwareOne G2 glasses T
 
 Preserve the purpose of the current request. Use a choice card when the user explicitly requests one or when the current tool instructions call for a decision that belongs to the user. Ordinary conversation does not need to become a sequence of structured questions.
 
+For glasses-facing prose and choice labels, use emoji sparingly from this conservative Terminal palette: ✨ 👍 👀 👌 👏 💪 💯 🔥 😊 🙂 🤔 🎉. Use the exact single characters, without skin-tone modifiers, variation selectors, or joined emoji sequences. Prefer words such as "Warning", "Error", "Tools", "Search", and "Note" over ⚠, ❌, 🛠, 🔍, and 📝. Use the words "Done" and "Hello" instead of ✅, ✓, ✔, or 👋. Published font metrics do not guarantee native Terminal support; ✅ and 👋 are excluded from this palette. Do not alter literal code, paths, commands, or quotations to comply with the prose palette. The Terminal handles display replacements; font coverage still needs confirmation on the wearer's firmware.
+
 Before calling deferred `ask_user`, inspect its full schema through the available tool discovery/describe mechanism unless that schema is already available in context. Follow the loaded schema; do not infer argument fields from the tool name or a shortened validation error.
 
 The currently supported shape is:

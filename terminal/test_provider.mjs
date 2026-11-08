@@ -169,13 +169,13 @@ test('OpenClaw provider: main-only resume, exact runs, offered decisions and unc
     assert.equal(panelReceipts.length,1);assert.deepEqual(panelReceipts[0].answers,expectedAnswers);
     assert.equal(calls.filter(c=>c.method==='question.resolve').length,resolutionsBeforePanels+1);
     const echoed=await echoDrain();
-    assert.deepEqual(echoed.filter(e=>e.type==='content'&&e.kind===5).map(e=>e.text),['Pick colors\nYou: Red, Blue',`Name?\nYou: ${voiceAnswer}`]);
+    assert.deepEqual(echoed.filter(e=>e.type==='content'&&e.kind===5).map(e=>e.text),['Pick colors\nYou: Red, Blue','Name?\nYou: A voice answer [emoji U+1F332]']);
     const retained=(await provider.getDeviceHistorySnapshot(id,10)).recentAnswerEvents;
     assert.deepEqual(retained.find(e=>e.requestId===panels.id).answers,expectedAnswers);
     echoView=await echoCall('open',{sessionId:id});echoCursor=0;
     const replayed=(await echoDrain()).filter(e=>e.type==='content'&&e.kind===5);
     assert.equal(replayed.filter(e=>e.text==='Pick colors\nYou: Red, Blue').length,1);
-    assert.equal(replayed.filter(e=>e.text===`Name?\nYou: ${voiceAnswer}`).length,1);
+    assert.equal(replayed.filter(e=>e.text==='Name?\nYou: A voice answer [emoji U+1F332]').length,1);
     // No rejected, cancelled, timed-out or failed resolution can echo the
     // caller's proposed values as if the Gateway accepted them.
     for(const status of ['cancelled','expired','pending']) {
